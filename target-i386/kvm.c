@@ -17,7 +17,11 @@
 #include <sys/mman.h>
 #include <sys/utsname.h>
 
+#ifdef __sun__
+#include <sys/kvm.h>
+#else
 #include <linux/kvm.h>
+#endif
 
 #include "qemu-common.h"
 #include "sysemu.h"
@@ -33,6 +37,11 @@
 #ifdef CONFIG_KVM_PARA
 #include <linux/kvm_para.h>
 #endif
+
+#ifdef __sun__
+#define	__u64	uint64_t
+#endif
+
 //
 //#define DEBUG_KVM
 

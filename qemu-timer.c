@@ -216,11 +216,15 @@ static void win32_rearm_timer(struct qemu_alarm_timer *t);
 static int unix_start_timer(struct qemu_alarm_timer *t);
 static void unix_stop_timer(struct qemu_alarm_timer *t);
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__sun__)
 
 static int dynticks_start_timer(struct qemu_alarm_timer *t);
 static void dynticks_stop_timer(struct qemu_alarm_timer *t);
 static void dynticks_rearm_timer(struct qemu_alarm_timer *t);
+
+#endif
+
+#ifdef __linux__
 
 static int hpet_start_timer(struct qemu_alarm_timer *t);
 static void hpet_stop_timer(struct qemu_alarm_timer *t);
@@ -289,9 +293,11 @@ int64_t qemu_icount_round(int64_t count)
 
 static struct qemu_alarm_timer alarm_timers[] = {
 #ifndef _WIN32
-#ifdef __linux__
+#if defined(__linux__) || defined(__sun__)
     {"dynticks", dynticks_start_timer,
      dynticks_stop_timer, dynticks_rearm_timer, NULL},
+#endif
+#ifdef __linux__
     /* HPET - if available - is preferred */
     {"hpet", hpet_start_timer, hpet_stop_timer, NULL, NULL},
     /* ...otherwise try RTC */
@@ -838,6 +844,10 @@ static void rtc_stop_timer(struct qemu_alarm_timer *t)
     close(rtc_fd);
 }
 
+#endif /* defined(__linux__) */
+
+#if defined(__linux__) || defined(__sun__)
+
 static int dynticks_start_timer(struct qemu_alarm_timer *t)
 {
     struct sigevent ev;
@@ -918,7 +928,7 @@ static void dynticks_rearm_timer(struct qemu_alarm_timer *t)
     }
 }
 
-#endif /* defined(__linux__) */
+#endif /* defined(__linux__) || defined(__sun__) */
 
 #if !defined(_WIN32)
 

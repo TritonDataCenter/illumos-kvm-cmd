@@ -12,13 +12,17 @@
 #include <string.h>
 #include "hw/hw.h"
 #include "gdbstub.h"
+#ifdef __linux__
 #include <sys/io.h>
+#endif
 
 #include "qemu-kvm.h"
 #include "libkvm.h"
 #include <pthread.h>
 #include <sys/utsname.h>
+#ifdef CONFIG_KVM_PARA
 #include <linux/kvm_para.h>
+#endif
 #include <sys/ioctl.h>
 
 #include "kvm.h"

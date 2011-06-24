@@ -28,7 +28,9 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include "compatfd.h"
+#ifdef __linux__
 #include <sys/prctl.h>
+#endif
 
 #define false 0
 #define true 1
@@ -250,15 +252,32 @@ static void kvm_create_vcpu(CPUState *env, int id)
     int r;
     KVMState *s = kvm_state;
 
+#ifdef CONFIG_SOLARIS
+    r = kvm_vm_clone(kvm_state);
+
+    if (r < 0) {
+        fprintf(stderr, "kvm_create_vcpu could not clone fd: %m\n");
+        goto err;
+    }
+
+    env->kvm_fd = r;
+    env->kvm_state = kvm_state;
+
+    r = ioctl(env->kvm_fd, KVM_CREATE_VCPU, id);
+#else
     r = kvm_vm_ioctl(kvm_state, KVM_CREATE_VCPU, id);
+#endif
+
     if (r < 0) {
         fprintf(stderr, "kvm_create_vcpu: %m\n");
         fprintf(stderr, "Failed to create vCPU. Check the -smp parameter.\n");
         goto err;
     }
 
+#ifndef CONFIG_SOLARIS
     env->kvm_fd = r;
     env->kvm_state = kvm_state;
+#endif
 
     mmap_size = kvm_ioctl(kvm_state, KVM_GET_VCPU_MMAP_SIZE, 0);
     if (mmap_size < 0) {
@@ -318,7 +337,11 @@ int kvm_create_vm(kvm_context_t kvm)
         fprintf(stderr, "kvm_create_vm: %m\n");
         return -1;
     }
+#ifdef CONFIG_SOLARIS
+    kvm_state->vmfd = kvm_state->fd;
+#else
     kvm_state->vmfd = fd;
+#endif
     return 0;
 }
 
@@ -631,6 +654,9 @@ int kvm_run(CPUState *env)
             r = kvm_arch_halt(env);
             break;
         case KVM_EXIT_IRQ_WINDOW_OPEN:
+#ifdef CONFIG_SOLARIS
+	case KVM_EXIT_INTR:
+#endif
             break;
         case KVM_EXIT_SHUTDOWN:
             r = handle_shutdown(kvm, env);
@@ -1097,7 +1123,7 @@ int kvm_irqfd(kvm_context_t kvm, int gsi, int flags)
 #endif                          /* KVM_CAP_IRQFD */
 unsigned long kvm_get_thread_id(void)
 {
-    return syscall(SYS_gettid);
+    return pthread_self();
 }
 
 static void qemu_cond_wait(pthread_cond_t *cond)
@@ -1515,7 +1541,9 @@ int kvm_init_ap(void)
     action.sa_flags = SA_SIGINFO;
     action.sa_sigaction = (void (*)(int, siginfo_t*, void*))sigbus_handler;
     sigaction(SIGBUS, &action, NULL);
+#ifdef __linux__
     prctl(PR_MCE_KILL, 1, 1, 0, 0);
+#endif
     return 0;
 }
 

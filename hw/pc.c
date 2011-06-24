@@ -45,7 +45,7 @@
 #include "ui/qemu-spice.h"
 
 /* output Bochs bios info messages */
-//#define DEBUG_BIOS
+#define DEBUG_BIOS
 
 /* debug PC/ISA interrupts */
 //#define DEBUG_IRQ

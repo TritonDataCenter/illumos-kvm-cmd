@@ -25,7 +25,11 @@
 #define __user       /* temporary, until installed via make headers_install */
 #endif
 
+#ifdef __sun__
+#include <sys/kvm.h>
+#else
 #include <linux/kvm.h>
+#endif
 
 #include <signal.h>
 

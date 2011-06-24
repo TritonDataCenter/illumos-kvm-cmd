@@ -35,7 +35,8 @@ typedef enum {
     NET_CLIENT_TYPE_TAP,
     NET_CLIENT_TYPE_SOCKET,
     NET_CLIENT_TYPE_VDE,
-    NET_CLIENT_TYPE_DUMP
+    NET_CLIENT_TYPE_DUMP,
+    NET_CLIENT_TYPE_VNIC
 } net_client_type;
 
 typedef void (NetPoll)(VLANClientState *, bool enable);

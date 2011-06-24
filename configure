@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # qemu configure script (c) 2003 Fabrice Bellard
 #
@@ -1693,8 +1693,16 @@ fi
 ##########################################
 # kvm probe
 if test "$kvm" != "no" ; then
+  if test "$targetos" = "SunOS" ; then
+    cat > $TMPC <<EOF
+#include <sys/kvm.h>
+EOF
+  else
     cat > $TMPC <<EOF
 #include <linux/kvm.h>
+EOF
+  fi
+    cat >> $TMPC <<EOF
 #if !defined(KVM_API_VERSION) || KVM_API_VERSION < 12 || KVM_API_VERSION > 12
 #error Invalid KVM version
 #endif
@@ -1725,7 +1733,7 @@ EOF
     cat >> $TMPC <<EOF
 int main(void) { return 0; }
 EOF
-  if test "$kerneldir" != "" ; then
+  if test "$kerneldir" != "" -a "$targetos" = "Linux" ; then
       kvm_cflags=-I"$kerneldir"/include
       if test \( "$cpu" = "i386" -o "$cpu" = "x86_64" \) \
          -a -d "$kerneldir/arch/x86/include" ; then
@@ -1737,6 +1745,8 @@ EOF
         elif test -d "$kerneldir/arch/$cpu/include" ; then
             kvm_cflags="$kvm_cflags -I$kerneldir/arch/$cpu/include"
       fi
+  elif test "$kerneldir" != "" -a "$targetos" = "SunOS" ; then
+      kvm_cflags=-I"$kerneldir"
   else
     kvm_cflags=`$pkg_config --cflags kvm-kmod 2>/dev/null`
     if test "$kvm_cflags" = ""; then
@@ -1791,8 +1801,16 @@ if test "$kvm_cap_pit" != "no" ; then
   if test "$kvm" = "no" -a "$kvm_cap_pit" = "yes" ; then
       feature_not_found "kvm_cap_pit (kvm is not enabled)"
   fi
-  cat > $TMPC <<EOF
+  if test "$targetos" = "SunOS" ; then
+    cat > $TMPC <<EOF
+#include <sys/kvm.h>
+EOF
+  else
+    cat > $TMPC <<EOF
 #include <linux/kvm.h>
+EOF
+  fi
+  cat >> $TMPC <<EOF
 #ifndef KVM_CAP_PIT
 #error "kvm no pit capability"
 #endif
@@ -1814,6 +1832,9 @@ fi
 if test "$kvm_cap_device_assignment" != "no" ; then
   if test "$kvm" = "no" -a "$kvm_cap_device_assignment" = "yes" ; then
       feature_not_found "kvm_cap_device_assignment (kvm is not enabled)"
+  fi
+  if test "$targetos" = "SunOS" ; then
+      feature_not_found "kvm_cap_device_assignment (not supported on SunOS)"
   fi
   cat > $TMPC <<EOF
 #include <linux/kvm.h>
@@ -2673,6 +2694,8 @@ fi
 if test "$solaris" = "yes" ; then
   echo "CONFIG_SOLARIS=y" >> $config_host_mak
   echo "CONFIG_SOLARIS_VERSION=$solarisrev" >> $config_host_mak
+# XXX rm needs to test / make this be a part of configure
+  echo "CONFIG_SUNOS_VNIC=y" >> $config_host_mak
   if test "$needs_libsunmath" = "yes" ; then
     echo "CONFIG_NEEDS_LIBSUNMATH=y" >> $config_host_mak
   fi

@@ -350,7 +350,7 @@ extern const VMStateInfo vmstate_info_uint16;
 extern const VMStateInfo vmstate_info_uint32;
 extern const VMStateInfo vmstate_info_uint64;
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__sun__)
 extern const VMStateInfo vmstate_info_u64;
 #endif
 
@@ -673,9 +673,14 @@ extern const VMStateDescription vmstate_usb_device;
 
 /* This is needed because on linux __u64 is unsigned long long
    and on glibc uint64_t is unsigned long on 64 bits */
-#ifdef __linux__
+#if defined(__linux__)
 #define VMSTATE_U64_V(_f, _s, _v)                                     \
     VMSTATE_SINGLE(_f, _s, _v, vmstate_info_u64, __u64)
+#define VMSTATE_U64(_f, _s)                                           \
+    VMSTATE_U64_V(_f, _s, 0)
+#else
+#define VMSTATE_U64_V(_f, _s, _v)                                     \
+    VMSTATE_SINGLE(_f, _s, _v, vmstate_info_uint64, uint64_t)
 #define VMSTATE_U64(_f, _s)                                           \
     VMSTATE_U64_V(_f, _s, 0)
 #endif

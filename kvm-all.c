@@ -18,7 +18,12 @@
 #include <sys/mman.h>
 #include <stdarg.h>
 
+#ifdef __sun__
+#include <sys/kvm.h>
+#else
 #include <linux/kvm.h>
+#endif
+
 
 #include "qemu-common.h"
 #include "qemu-barrier.h"
@@ -175,12 +180,23 @@ int kvm_physical_memory_addr_from_ram(KVMState *s, ram_addr_t ram_addr,
 static int kvm_set_user_memory_region(KVMState *s, KVMSlot *slot)
 {
     struct kvm_userspace_memory_region mem;
+#ifdef CONFIG_SOLARIS
+    caddr_t p;
+    char c;
+#endif
 
     mem.slot = slot->slot;
     mem.guest_phys_addr = slot->start_addr;
     mem.memory_size = slot->memory_size;
     mem.userspace_addr = (unsigned long)qemu_safe_ram_ptr(slot->phys_offset);
     mem.flags = slot->flags;
+#ifdef CONFIG_SOLARIS
+    for (p = (caddr_t)mem.userspace_addr;
+	 p < (caddr_t)mem.userspace_addr + mem.memory_size;
+	 p += PAGE_SIZE)
+	c = *p;
+#endif /* CONFIG_SOLARIS */
+
     if (s->migration_log) {
         mem.flags |= KVM_MEM_LOG_DIRTY_PAGES;
     }
@@ -1058,6 +1074,29 @@ int kvm_vm_ioctl(KVMState *s, int type, ...)
     }
     return ret;
 }
+
+#ifdef CONFIG_SOLARIS
+int kvm_vm_clone(KVMState *s)
+{
+    struct stat stat;
+    int fd;
+
+    if (fstat(s->fd, &stat) != 0)
+        return -errno;
+
+    fd = qemu_open("/dev/kvm", O_RDWR);
+
+    if (fd == -1)
+         return -errno;
+
+    if (ioctl(fd, KVM_CLONE, stat.st_rdev) == -1) {
+        close(fd);
+        return -errno;
+    }
+
+    return fd;
+}
+#endif
 
 int kvm_vcpu_ioctl(CPUState *env, int type, ...)
 {
