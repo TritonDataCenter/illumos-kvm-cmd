@@ -1,0 +1,6 @@
+[submodule "roms/vgabios"]
+	path = roms/vgabios
+	url = git://git.kernel.org/pub/scm/virt/kvm/vgabios.git/
+[submodule "roms/seabios"]
+	path = roms/seabios
+	url = git://git.qemu.org/seabios.git/

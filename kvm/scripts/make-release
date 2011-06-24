@@ -1,0 +1,81 @@
+#!/bin/bash -e
+
+usage() {
+    echo "usage: $0 [--upload] [--formal] commit [name] [tarball] [user]"
+    exit 1
+}
+
+[[ -f ~/.kvmreleaserc ]] && . ~/.kvmreleaserc
+
+upload=
+formal=
+
+releasedir=~/sf-release
+[[ -z "$TMP" ]] && TMP="/tmp"
+tmpdir=`mktemp -d "$TMP/qemu-kvm-make-release.XXXXXXXXXX"`
+while [[ "$1" = -* ]]; do
+    opt="$1"
+    shift
+    case "$opt" in
+	--upload)
+	    upload="yes"
+	    ;;
+	--formal)
+	    formal="yes"
+	    ;;
+	*)
+	    usage
+	    ;;
+    esac
+done
+
+commit="$1"
+name="$2"
+
+if [[ -z "$commit" ]]; then
+    usage
+fi
+
+if [[ -z "$name" ]]; then
+    name="$commit"
+fi
+
+tarball="$3"
+if [[ -z "$tarball" ]]; then
+    tarball="$releasedir/$name.tar.gz"
+fi
+#strip trailing .gz if any
+tarball=${tarball/%.gz/}
+
+cd "$(dirname "$0")"/../..
+mkdir -p "$(dirname "$tarball")"
+git archive --prefix="$name/" --format=tar "$commit" > "$tarball"
+
+mtime=`git show --pretty=format:%ct "$commit""^{commit}" -- | head -n 1`
+tarargs="--owner=root --group=root"
+
+mkdir -p "$tmpdir/$name"
+git cat-file -p "${commit}:roms" | awk ' { print $4, $3 } ' \
+    > "$tmpdir/$name/EXTERNAL_DEPENDENCIES"
+touch -d "@$mtime" "$tmpdir/$name/EXTERNAL_DEPENDENCIES"
+tar -rf "$tarball" -C "$tmpdir" \
+    $tarargs \
+    "$name/EXTERNAL_DEPENDENCIES"
+rm -rf "$tmpdir"
+
+if [[ -n "$formal" ]]; then
+    mkdir -p "$tmpdir/$name"
+    echo "$name" > "$tmpdir/$name/KVM_VERSION"
+    touch -d "@$mtime" "$tmpdir/$name/KVM_VERSION"
+    tar -rf "$tarball" -C "$tmpdir" "$name/KVM_VERSION" \
+        $tarargs
+    rm -rf "$tmpdir"
+fi
+
+rm -f "$tarball.gz"
+gzip -9 "$tarball"
+tarball="$tarball.gz"
+
+if [[ -n "$upload" ]]; then
+    rsync --progress -h "$tarball" avik@frs.sourceforge.net:uploads/
+fi
