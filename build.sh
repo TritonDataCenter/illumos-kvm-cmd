@@ -7,13 +7,6 @@ for dir in seabios vgabios kvm/test; do
     cp roms/${dir}/config.mak.tmpl roms/${dir}/config.mak
 done
 
-#
-# Temporairly removed
-# 
-#   --enable-kvm \
-#   --enable-kvm-pit \
-#
-
 echo "==> Running configure"
 ./configure \
     --prefix=. \
@@ -23,6 +16,8 @@ echo "==> Running configure"
     --disable-brlapi \
     --disable-curl \
     --enable-debug \
+    --enable-kvm \
+    --enable-kvm-pit \
     --disable-kvm-device-assignment \
     --disable-sdl \
     --disable-vnc-jpeg \
