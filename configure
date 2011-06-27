@@ -139,6 +139,7 @@ xen=""
 linux_aio=""
 attr=""
 vhost_net=""
+sunos_vnic=""
 xfs=""
 
 gprof="no"
@@ -749,6 +750,10 @@ for opt do
   ;;
   --enable-rbd) rbd="yes"
   ;;
+  --disable-sunos-vnic) sunos_vnic="no"
+  ;;
+  --enable-sunos-vnic) sunos_vnic="yes"
+  ;;
   *) echo "ERROR: unknown option $opt"; show_help="yes"
   ;;
   esac
@@ -942,6 +947,8 @@ echo "  --enable-docs            enable documentation build"
 echo "  --disable-docs           disable documentation build"
 echo "  --disable-vhost-net      disable vhost-net acceleration support"
 echo "  --enable-vhost-net       enable vhost-net acceleration support"
+echo "  --disable-sunos-vnic     disable support for crossbow vnics"
+echo "  --enable-sunos-vnic      enable support for crossbow vnics"
 echo "  --enable-trace-backend=B Set trace backend"
 echo "                           Available backends:" $("$source_path"/scripts/tracetool --list-backends)
 echo "  --with-trace-file=NAME   Full PATH,NAME of file to store traces"
@@ -1900,6 +1907,24 @@ EOF
     fi
 fi
 
+
+##########################################
+# test for sunos vnic
+
+if test "$sunos_vnic" != "no"; then
+  cat > $TMPC <<EOF
+#include <libdlpi.h>
+int main(void) { return 0; }
+EOF
+  if compile_prog "" "-ldlpi" ; then
+    sunos_vnic=yes
+  else
+    if test "sunos_vnic" = "yes" ; then
+      feature_not_found "sunos-vnic"
+    fi
+  fi
+fi
+
 ##########################################
 # pthread probe
 PTHREADLIBS_LIST="-lpthread -lpthreadGC2"
@@ -2612,6 +2637,7 @@ echo "madvise           $madvise"
 echo "posix_madvise     $posix_madvise"
 echo "uuid support      $uuid"
 echo "vhost-net support $vhost_net"
+echo "SunOS VNIC support $sunos_vnic"
 echo "Trace backend     $trace_backend"
 echo "Trace output file $trace_file-<pid>"
 echo "spice support     $spice"
@@ -2694,8 +2720,6 @@ fi
 if test "$solaris" = "yes" ; then
   echo "CONFIG_SOLARIS=y" >> $config_host_mak
   echo "CONFIG_SOLARIS_VERSION=$solarisrev" >> $config_host_mak
-# XXX rm needs to test / make this be a part of configure
-  echo "CONFIG_SUNOS_VNIC=y" >> $config_host_mak
   if test "$needs_libsunmath" = "yes" ; then
     echo "CONFIG_NEEDS_LIBSUNMATH=y" >> $config_host_mak
   fi
@@ -2894,6 +2918,13 @@ fi
 
 if test "$spice" = "yes" ; then
   echo "CONFIG_SPICE=y" >> $config_host_mak
+fi
+
+if test "$sunos_vnic" = "yes" ; then
+    echo "CONFIG_SUNOS_VNIC=y" >> $config_host_mak
+    LDFLAGS="-ldlpi $LDFLAGS"
+else
+    echo "failed"
 fi
 
 # XXX: suppress that

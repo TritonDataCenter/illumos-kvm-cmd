@@ -47,13 +47,6 @@ net-nested-$(CONFIG_VDE) += vde.o
 net-nested-$(CONFIG_SUNOS_VNIC) += vnic.o
 net-obj-y += $(addprefix net/, $(net-nested-y))
 
-#
-# We need to link against libdlpi if we have CONFIG_SUNOS_VNIC
-#
-ifeq ($(CONFIG_SUNOS_VNIC),y)
-LDFLAGS+=-ldlpi
-endif
-
 ifeq ($(CONFIG_VIRTIO)$(CONFIG_VIRTFS),yy)
 # Lots of the fsdev/9pcode is pulled in by vl.c via qemu_fsdev_add.
 # only pull in the actual virtio-9p device if we also enabled virtio.

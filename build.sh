@@ -27,5 +27,10 @@ echo "==> Running configure"
     --kerneldir=$(cd `pwd`/../kvm; pwd) \
     --cpu=x86_64
 
+if [[ $? != 0 ]]; then
+	echo "Failed to configure, bailing"
+	exit 1
+fi
+
 echo "==> Make"
 gmake -j10
