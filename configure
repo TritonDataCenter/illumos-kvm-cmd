@@ -2921,8 +2921,11 @@ if test "$spice" = "yes" ; then
 fi
 
 if test "$sunos_vnic" = "yes" ; then
-    echo "CONFIG_SUNOS_VNIC=y" >> $config_host_mak
-    LDFLAGS="-ldlpi $LDFLAGS"
+  echo "CONFIG_SUNOS_VNIC=y" >> $config_host_mak
+  LDFLAGS="-ldlpi $LDFLAGS"
+  if test "$kvm" = "yes" ; then
+    echo "CONFIG_SUNOS_VNIC_KVM=y" >> $config_host_mak
+  fi
 else
     echo "failed"
 fi

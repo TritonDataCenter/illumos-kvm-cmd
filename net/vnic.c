@@ -40,7 +40,6 @@
 
 #include "net/vnic.h"
 
-#include "config-host.h"
 #include "qemu-common.h"
 #include "qemu-error.h"
 #include "qemu-option.h"
@@ -218,6 +217,7 @@ static NetClientInfo net_vnic_info = {
 	.cleanup = vnic_cleanup
 };
 
+#ifdef CONFIG_SUNOS_VNIC_KVM
 static int
 net_init_kvm(int vfd)
 {
@@ -239,6 +239,7 @@ net_init_kvm(int vfd)
 
 	return (0);
 }
+#endif
 
 int
 net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
@@ -304,8 +305,7 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 	snprintf(vsp->vns_nc.info_str, sizeof (vsp->vns_nc.info_str), "ifname=%s",
 	    qemu_opt_get(opts, "ifname"));
 
-	/* XXX This should be ifdef'd around whether or not KVM is present */
-#ifdef CONFIG_KVM
+#ifdef CONFIG_SUNOS_VNIC_KVM
 	net_init_kvm(fd);
 #endif
 
