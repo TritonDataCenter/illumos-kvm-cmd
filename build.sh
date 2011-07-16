@@ -9,7 +9,7 @@ done
 
 echo "==> Running configure"
 ./configure \
-    --prefix=. \
+    --prefix=/smartdc \
     --audio-card-list= \
     --audio-drv-list= \
     --disable-bluez \
@@ -20,8 +20,8 @@ echo "==> Running configure"
     --enable-kvm-pit \
     --disable-kvm-device-assignment \
     --disable-sdl \
-    --disable-vnc-jpeg \
     --disable-vnc-png \
+    --disable-vnc-jpeg \
     --disable-vnc-sasl \
     --disable-vnc-tls \
     --kerneldir=$(cd `pwd`/../kvm; pwd) \

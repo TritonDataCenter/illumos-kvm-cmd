@@ -60,5 +60,7 @@ pc-bios/optionrom/multiboot.bin
 pc-bios/optionrom/multiboot.raw
 pc-bios/optionrom/extboot.bin
 pc-bios/optionrom/vapic.bin
+roms/seabios/Makefile
+roms/vgabios/Makefile
 .stgit-*
 cscope.*
