@@ -1,0 +1,63 @@
+  ___  _____ __  __ _   _ 
+ / _ \| ____|  \/  | | | |
+| | | |  _| | |\/| | | | |
+| |_| | |___| |  | | |_| |
+ \__\_\_____|_|  |_|\___/ 
+                          
+
+For full documentation on all the various options for QEMU please see the html docs.
+
+BUILDING
+
+Preparing:
+
+Edit build.sh and change the --kerneldir option to point to the directory of
+the kvm repository and change the --prefix option to whatever you want.
+
+$ ./build.sh
+$ make install
+
+USING
+
+Follow the qemu documentation for all of the various options available. The
+rest of this will be examples and specific pieces about how to use things with
+a VNIC and a ZVOL. The following is a sample configuration for qemu running a Linux VM.
+
+./smartdc/qemu-14/bin/qemu-vnic \
+        -enable-kvm \
+        -nographic \
+        -kernel vmimg/kvm.vmlinuz \
+        -initrd vmimg/kvm.initrd \
+        -smp 4 \
+        -append "console=tty0 console=ttyS0,115200n8 earlyprintk=serial,ttyS0 debug console_loglevel=8 loglevel=8 apic=debug nosplash rw" \
+        -m 1024 \
+        -vnc 0.0.0.0:0 \
+        -net nic,vlan=0,name=net0,model=virtio,macaddr=90:b8:d0:c0:ff:ee \
+        -net vnic,vlan=0,name=net0,ifname=eth0,macaddr=90:b8:d0:c0:ff:ee \
+        -no-hpet \
+        -chardev socket,id=serial0,path=/tmp/vm.console,server,nowait \
+        -serial chardev:serial0 \
+        -drive file=/dev/zvol/rdsk/zones/rec-8,if=virtio,index=0
+
+ZVOLs:
+
+It is highly desirable to be able to give a virtual machine a zvol to use as a
+disk. This is accomplished via the -drive option. Simply pass the block device
+that corresponds to the zvol.
+
+VNICs:
+
+We have added an option to have a virtual machine's network interface card
+directly correspond to a Crossbow vnic on the system. The -net vnic has several
+mandatory arguments:
+  *  vlan must be specified and correspond to a single -net nic line
+  *  name must be specified and correspond to a single -net nic line
+  *  macaddr must be specified and correspond to a single -net nic line. This
+     is the mac address that the vnic will use.
+  *  ifname must be specified and correspond to the name of the crossbow vnic.
+
+To set up the crossbow vnic, simply create it. There is no need to plumb it.
+The device will be opened up in promiscuous mode.
+
+To create a vnic you'll want something akin to:
+$ dladm create-vnic -l e1000g vnic0 
