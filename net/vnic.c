@@ -255,15 +255,14 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 		return (-1);
 	}
 
-	if ((mac = qemu_opt_get(opts, "macaddr")) == NULL) {
-		error_report("missing macaddr required for vnic\n");
-		return (-1);
-	}
+	mac = qemu_opt_get(opts, "macaddr");
 
-	macaddr = _link_aton(mac, &len);
-	if (macaddr == NULL || len != ETHERADDRL) {
-		error_report("invalid macaddr for vnic: %s\n", mac);
-		return (-1);
+	if (mac != NULL) {
+		macaddr = _link_aton(mac, &len);
+		if (macaddr == NULL || len != ETHERADDRL) {
+			error_report("invalid macaddr for vnic: %s\n", mac);
+			return (-1);
+		}
 	}
 
 	ncp = qemu_new_net_client(&net_vnic_info, vlan, NULL, "vnic", name);
@@ -279,11 +278,16 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 		return (-1);
 	}
 
-	assert(len == ETHERADDRL);
-	if (dlpi_set_physaddr(vsp->vns_hdl, DL_CURR_PHYS_ADDR, macaddr,
-	    ETHERADDRL) != DLPI_SUCCESS) {
-		error_report("vnic: failed to set mac address\n");
-		return (-1);
+	/*
+	 * We only set the mac address of the vnic if the user passed in the
+	 * option on the command line.
+	 */
+	if (mac != NULL) {
+		if (dlpi_set_physaddr(vsp->vns_hdl, DL_CURR_PHYS_ADDR, macaddr,
+		    ETHERADDRL) != DLPI_SUCCESS) {
+			error_report("vnic: failed to set mac address\n");
+			return (-1);
+		}
 	}
 
 	if (dlpi_promiscon(vsp->vns_hdl, DL_PROMISC_SAP) != DLPI_SUCCESS) {

@@ -52,8 +52,8 @@ directly correspond to a Crossbow vnic on the system. The -net vnic has several
 mandatory arguments:
   *  vlan must be specified and correspond to a single -net nic line
   *  name must be specified and correspond to a single -net nic line
-  *  macaddr must be specified and correspond to a single -net nic line. This
-     is the mac address that the vnic will use.
+  *  macaddr must be specified if the MAC Address of the VNIC does not match
+     the MAC address on the -net nic line.
   *  ifname must be specified and correspond to the name of the crossbow vnic.
 
 To set up the crossbow vnic, simply create it. There is no need to plumb it.
