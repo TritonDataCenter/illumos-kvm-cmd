@@ -25,8 +25,19 @@ QEMU_DGFLAGS += -MMD -MP -MT $@ -MF $(*D)/$(*F).d
 
 LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(1) $(LIBS),"  LINK  $(TARGET_DIR)$@")
 
+ifeq ($(TRACE_BACKEND),dtrace)
+ifneq ($(strip $(CONFIG_SOLARIS)),)
+%$(EXESUF): %.o
+	$(call quiet-command, dtrace $(CONFIG_DTRACE_FLAGS) -o trace-dtrace.o -s trace-dtrace.dtrace  -G $^,"  LINK  $(TARGET_DIR)$@.dtrace")
+	$(call LINK,$^)
+else
 %$(EXESUF): %.o
 	$(call LINK,$^)
+endif
+else
+%$(EXESUF): %.o
+	$(call LINK,$^)
+endif
 
 %.a:
 	$(call quiet-command,rm -f $@ && $(AR) rcs $@ $^,"  AR    $(TARGET_DIR)$@")

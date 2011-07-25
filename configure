@@ -2968,6 +2968,13 @@ fi
 if test "$trace_backend" = "dtrace" -a "$trace_backend_stap" = "yes" ; then
   echo "CONFIG_SYSTEMTAP_TRACE=y" >> $config_host_mak
 fi
+if test "$trace_backend" = "dtrace" -a "$trace_backend_stap" != "yes" ; then
+  if test "$cpu" = "x86_64" -o "$cpu" = "sparc64" ; then
+    echo "CONFIG_DTRACE_FLAGS=-64" >> $config_host_mak
+  else
+    echo "CONFIG_DTRACE_FLAGS=-32" >> $config_host_mak
+  fi
+fi
 echo "CONFIG_TRACE_FILE=$trace_file" >> $config_host_mak
 
 echo "TOOLS=$tools" >> $config_host_mak

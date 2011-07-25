@@ -24,6 +24,7 @@ echo "==> Running configure"
     --disable-vnc-jpeg \
     --disable-vnc-sasl \
     --disable-vnc-tls \
+    --enable-trace-backend=dtrace \
     --kerneldir=$(cd `pwd`/../kvm; pwd) \
     --cpu=x86_64
 
@@ -33,4 +34,4 @@ if [[ $? != 0 ]]; then
 fi
 
 echo "==> Make"
-gmake -j10
+gmake

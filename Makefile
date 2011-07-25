@@ -140,7 +140,7 @@ trace-dtrace.dtrace-timestamp: $(SRC_PATH)/trace-events config-host.mak
 	@cmp -s $@ trace-dtrace.dtrace || cp $@ trace-dtrace.dtrace
 
 trace-dtrace.o: trace-dtrace.dtrace $(GENERATED_HEADERS)
-	$(call quiet-command,dtrace -o $@ -G -s $<, "  GEN trace-dtrace.o")
+	$(call quiet-command,dtrace $(CONFIG_DTRACE_FLAGS) -o $@ -G -s $<, "  GEN trace-dtrace.o")
 
 simpletrace.o: simpletrace.c $(GENERATED_HEADERS)
 
