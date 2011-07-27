@@ -1364,7 +1364,7 @@ int kvm_set_signal_mask(CPUState *env, const sigset_t *sigset)
 
     sigmask = qemu_malloc(sizeof(*sigmask) + sizeof(*sigset));
 
-    sigmask->len = 8;
+    sigmask->len = sizeof (sigset_t);
     memcpy(sigmask->sigset, sigset, sizeof(*sigset));
     r = kvm_vcpu_ioctl(env, KVM_SET_SIGNAL_MASK, sigmask);
     free(sigmask);
