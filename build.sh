@@ -13,7 +13,7 @@ PNGLIB="${PNGDIR}/proto/usr/local/lib"
 
 if [[ ! -d ${PNGDIR} ]]; then
     (curl ftp://ftp.simplesystems.org/pub/libpng/png/src/libpng-1.5.4.tar.gz | \
-        tar -zxf -)
+        gtar -zxf -)
     if [[ $? != "0" || ! -d ${PNGDIR} ]]; then
         echo "Failed to get libpng."
         rm -rf ${PNGDIR}
