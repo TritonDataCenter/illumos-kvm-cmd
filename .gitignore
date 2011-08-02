@@ -64,3 +64,4 @@ roms/seabios/Makefile
 roms/vgabios/Makefile
 .stgit-*
 cscope.*
+libpng-1.5.4/
