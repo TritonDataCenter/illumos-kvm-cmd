@@ -1535,7 +1535,9 @@ int kvm_init_ap(void)
 
     qemu_add_vm_change_state_handler(kvm_vm_state_change_handler, NULL);
 
-    signal(SIG_IPI, sig_ipi_handler);
+    memset(&action, 0, sizeof(action));
+    action.sa_sigaction = (void (*)(int, siginfo_t*, void*))sig_ipi_handler;
+    sigaction(SIG_IPI, &action, NULL);
 
     memset(&action, 0, sizeof(action));
     action.sa_flags = SA_SIGINFO;
