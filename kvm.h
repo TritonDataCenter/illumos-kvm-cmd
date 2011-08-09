@@ -9,6 +9,7 @@
  * This work is licensed under the terms of the GNU GPL, version 2 or later.
  * See the COPYING file in the top-level directory.
  *
+ * Copyright 2011 Joyent, Inc.
  */
 
 #ifndef QEMU_KVM_H

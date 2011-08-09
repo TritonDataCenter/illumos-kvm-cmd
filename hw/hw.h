@@ -1,4 +1,6 @@
 /* Declarations for use by hardware emulation.  */
+/* Copyright 2011 QEMU contributors */
+/* Portions Copyright 2011 Joyent, Inc. */
 #ifndef QEMU_HW_H
 #define QEMU_HW_H
 
