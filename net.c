@@ -1102,10 +1102,45 @@ static const struct {
                 .type = QEMU_OPT_STRING,
                 .help = "vnic interface name",
             },
-	    {
+            {
                 .name = "macaddr",
                 .type = QEMU_OPT_STRING,
                 .help = "MAC address",
+            },
+            {
+                .name = "ip",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP IP address",
+            },
+            {
+                .name = "netmask",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP netmask",
+            },
+            {
+                .name = "gateway_ip",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP gateway IP address",
+            },
+            {
+                .name = "server_ip",
+                .type = QEMU_OPT_STRING,
+                .help = "IP address to return as the DHCP server",
+            },
+            {
+                .name = "dns_ip",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP DNS server IP address",
+            },
+            {
+                .name = "hostname",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP DNS server IP address",
+            },
+            {
+                .name = "lease_time",
+                .type = QEMU_OPT_NUMBER,
+                .help = "DHCP DNS server lease time",
             },
             { /* end of list */ }
         },

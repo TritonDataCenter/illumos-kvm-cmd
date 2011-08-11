@@ -39,6 +39,7 @@
 #include <fcntl.h>
 
 #include "net/vnic.h"
+#include "net/vnic-dhcp.h"
 
 #include "qemu-common.h"
 #include "qemu-error.h"
@@ -59,6 +60,7 @@ typedef struct VNICState {
 	uint8_t		vns_buf[VNIC_BUFFSIZE];
 	uint_t		vns_sap;
 	dlpi_handle_t	vns_hdl;
+	VNICDHCPState	vns_ds;
 } VNICState;
 
 static void vnic_update_fd_handler(VNICState *);
@@ -103,7 +105,7 @@ vnic_read_packet(VNICState *vsp, uint8_t *buf, int len)
 		vnic_write_poll(vsp, 1);
 		return (0);
 	}
-	
+
 	if (ret == -1) {
 		return (-1);
 	}
@@ -150,6 +152,7 @@ vnic_send_completed(VLANClientState *nc, ssize_t len)
 	vnic_read_poll(vsp, 1);
 }
 
+/* outside world -> VM */
 static void
 vnic_send(void *opaque)
 {
@@ -179,10 +182,31 @@ vnic_writable(void *opaque)
 	qemu_flush_queued_packets(&vsp->vns_nc);
 }
 
+/* VM -> outside world */
 static ssize_t
 vnic_receive(VLANClientState *ncp, const uint8_t *buf, size_t size)
 {
 	VNICState *vsp = DO_UPCAST(VNICState, vns_nc, ncp);
+
+#if VNIC_DHCP_DEBUG
+	debug_eth_frame(buf, size);
+#endif
+
+	if (vsp->vns_ds.vnds_enabled && is_dhcp_request(buf, size)) {
+		int ret;
+
+		// XXX: do we need to handle arp requests for the fake IP?
+		ret = create_dhcp_response(buf, size, &vsp->vns_ds);
+		if (!ret)
+			return size;
+
+		ret = qemu_send_packet_async(&vsp->vns_nc,
+		    vsp->vns_ds.vnds_buf, ret, vnic_send_completed);
+		if (ret == 0)
+			vnic_read_poll(vsp, 0);
+
+		return size;
+	}
 
 	return (vnic_write_packet(vsp, buf, size));
 }
@@ -308,6 +332,9 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 
 	snprintf(vsp->vns_nc.info_str, sizeof (vsp->vns_nc.info_str), "ifname=%s",
 	    qemu_opt_get(opts, "ifname"));
+
+	if (vnic_dhcp_init(&vsp->vns_ds, opts) == 0)
+		return (-1);
 
 #ifdef CONFIG_SUNOS_VNIC_KVM
 	net_init_kvm(fd);
