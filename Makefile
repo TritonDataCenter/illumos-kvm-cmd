@@ -1,4 +1,8 @@
 # Makefile for QEMU.
+#
+# Copyright 2011 QEMU contributors
+# Portions Copyright 2011 Joyent, Inc.
+#
 
 GENERATED_HEADERS = config-host.h trace.h qemu-options.def
 ifeq ($(TRACE_BACKEND),dtrace)

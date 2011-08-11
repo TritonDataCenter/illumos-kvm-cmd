@@ -1,3 +1,5 @@
+# Copyright 2011 QEMU contributors
+# Portions Copyright 2011 Joyent, Inc.
 #######################################################################
 # QObject
 qobject-obj-y = qint.o qstring.o qdict.o qlist.o qfloat.o qbool.o

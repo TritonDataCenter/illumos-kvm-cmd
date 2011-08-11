@@ -1,3 +1,7 @@
+/*
+ * Copyright 2011 QEMU contributors
+ * Portions Copyright 2011 Joyent, Inc.
+ */
 #ifndef QEMU_NET_H
 #define QEMU_NET_H
 

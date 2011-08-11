@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # qemu configure script (c) 2003 Fabrice Bellard
+# portions copyright 2011 Joyent, Inc.
 #
 # set temporary file name
 if test ! -z "$TMPDIR" ; then

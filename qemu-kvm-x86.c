@@ -2,6 +2,7 @@
  * qemu/kvm integration, x86 specific code
  *
  * Copyright (C) 2006-2008 Qumranet Technologies
+ * Portions Copyright 2011 Joyent, Inc.
  *
  * Licensed under the terms of the GNU GPL version 2 or higher.
  */
