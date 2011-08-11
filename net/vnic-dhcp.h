@@ -29,8 +29,8 @@
 #include "qemu-option.h"
 
 #define	VNIC_BUFFSIZE	65536
-#define VNIC_DHCP_DEBUG 1
-#define VNIC_DHCP_HEX_DUMP 1
+#define VNIC_DHCP_DEBUG 0
+#define VNIC_DHCP_HEX_DUMP 0
 
 typedef struct VNICDHCPState {
 	unsigned int	vnds_enabled;

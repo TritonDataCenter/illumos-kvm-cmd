@@ -278,6 +278,7 @@ debug_eth_frame(const uint8_t *buf_p, size_t size)
 
 	DPRINTF("ethernet frame: ");
 #if VNIC_DHCP_HEX_DUMP
+	DPRINTF("\n");
 	hex_dump(dfd, buf_p, size);
 #endif
 
