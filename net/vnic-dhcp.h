@@ -32,6 +32,7 @@
 #define VNIC_DHCP_DEBUG 0
 #define VNIC_DHCP_HEX_DUMP 0
 #define VNIC_DHCP_NUM_RESOLVERS 4
+#define VNIC_DHCP_HOSTNAME_LEN 255
 
 typedef struct VNICDHCPState {
 	unsigned int	vnds_enabled;
@@ -43,7 +44,7 @@ typedef struct VNICDHCPState {
 	struct in_addr	vnds_gw_addr;
 	struct in_addr	vnds_dns_addrs[VNIC_DHCP_NUM_RESOLVERS];
 	uint32_t	vnds_lease_time;
-	char		vnds_client_hostname[33];
+	char		vnds_client_hostname[VNIC_DHCP_HOSTNAME_LEN];
 	unsigned int	vnds_num_dns_addrs;
 } VNICDHCPState;
 
