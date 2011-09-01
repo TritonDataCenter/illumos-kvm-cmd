@@ -1134,6 +1134,26 @@ static const struct {
                 .help = "DHCP DNS server IP address",
             },
             {
+                .name = "dns_ip0",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP DNS server IP address",
+            },
+            {
+                .name = "dns_ip1",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP DNS server IP address",
+            },
+            {
+                .name = "dns_ip2",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP DNS server IP address",
+            },
+            {
+                .name = "dns_ip3",
+                .type = QEMU_OPT_STRING,
+                .help = "DHCP DNS server IP address",
+            },
+            {
                 .name = "hostname",
                 .type = QEMU_OPT_STRING,
                 .help = "DHCP DNS server IP address",

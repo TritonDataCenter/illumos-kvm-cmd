@@ -375,7 +375,7 @@ populate_dhcp_reply(const struct bootp_t *bp, struct bootp_t *rbp,
 {
 	uint8_t *q;
 	struct in_addr preq_addr;
-	int dhcp_msg_type, val;
+	int dhcp_msg_type, val, i;
 
 	/* extract exact DHCP msg type */
 	dhcp_decode(bp, &dhcp_msg_type, &preq_addr);
@@ -434,9 +434,11 @@ populate_dhcp_reply(const struct bootp_t *bp, struct bootp_t *rbp,
 
 		// dns server list
 		*q++ = RFC1533_DNS;
-		*q++ = 4;
-		memcpy(q, &vdsp->vnds_dns_addr, sizeof(struct in_addr));
-		q += 4;
+		*q++ = 4 * vdsp->vnds_num_dns_addrs;
+		for (i = 0; i < vdsp->vnds_num_dns_addrs; i++) {
+			memcpy(q, &vdsp->vnds_dns_addrs[i], sizeof(struct in_addr));
+			q += 4;
+		}
 
 		// lease time
 		*q++ = RFC2132_LEASE_TIME;
@@ -625,15 +627,16 @@ is_dhcp_request(const uint8_t *buf_p, size_t size)
 }
 
 static int
-qemu_ip_opt(QemuOpts *opts, const char *opt_name, struct in_addr *addr)
+qemu_ip_opt(QemuOpts *opts, const char *opt_name, struct in_addr *addr, int required)
 {
 	const char *opt;
 	if ((opt = qemu_opt_get(opts, opt_name)) == NULL) {
-		error_report("missing %s for vnic dhcp\n", opt_name);
+		if (required)
+			error_report("missing %s for vnic dhcp\n", opt_name);
 		return (0);
 	}
 
-	if (!inet_pton(AF_INET, opt, addr)) {
+	if (inet_pton(AF_INET, opt, addr) != 1) {
 		error_report("invalid %s '%s' for vnic dhcp\n", opt_name, opt);
 		return (-1);
 	}
@@ -644,9 +647,11 @@ qemu_ip_opt(QemuOpts *opts, const char *opt_name, struct in_addr *addr)
 int
 vnic_dhcp_init(VNICDHCPState *vdsp, QemuOpts *opts)
 {
-	int ret;
+	int ret, i;
 	uint32_t lease_time;
 	const char *hostname;
+	char dns_opt[8];
+	int num_dns_servers = 0;
 
 	/* Use the ip option to determine if dhcp should be enabled */
 	if (qemu_opt_get(opts, "ip") == NULL) {
@@ -655,13 +660,13 @@ vnic_dhcp_init(VNICDHCPState *vdsp, QemuOpts *opts)
 		return (1);
 	}
 
-	if (!qemu_ip_opt(opts, "ip", &(vdsp->vnds_client_addr)))
+	if (!qemu_ip_opt(opts, "ip", &(vdsp->vnds_client_addr), 1))
 		return (0);
 
-	if (!qemu_ip_opt(opts, "netmask", &(vdsp->vnds_netmask_addr)))
+	if (!qemu_ip_opt(opts, "netmask", &(vdsp->vnds_netmask_addr), 1))
 		return (0);
 
-	if (!(ret = qemu_ip_opt(opts, "server_ip", &(vdsp->vnds_srv_addr)))) {
+	if (!(ret = qemu_ip_opt(opts, "server_ip", &(vdsp->vnds_srv_addr), 0))) {
 		if (ret == 0) {
 			/* default DHCP server address */
 			inet_pton(AF_INET, "169.254.169.254",
@@ -671,23 +676,39 @@ vnic_dhcp_init(VNICDHCPState *vdsp, QemuOpts *opts)
 		}
 	}
 
-	if (!qemu_ip_opt(opts, "gateway_ip", &(vdsp->vnds_gw_addr)))
+	if (!qemu_ip_opt(opts, "gateway_ip", &(vdsp->vnds_gw_addr), 1))
 		return (0);
 
-	if (!(ret = qemu_ip_opt(opts, "dns_ip", &(vdsp->vnds_dns_addr)))) {
-		if (ret == 0) {
-			/* default DNS server */
-			inet_pton(AF_INET, "8.8.8.8", &(vdsp->vnds_dns_addr));
-		} else {
+	if ((ret = qemu_ip_opt(opts, "dns_ip", &(vdsp->vnds_dns_addrs[0]), 0)) != 0) {
+		if (ret == -1)
 			return (0);
-		}
+		num_dns_servers = 1;
 	}
+
+	for(i = 0; i < VNIC_DHCP_NUM_RESOLVERS; i++) {
+		sprintf(dns_opt, "dns_ip%d", i);
+		if (!(ret = qemu_ip_opt(opts, dns_opt, &(vdsp->vnds_dns_addrs[i]), 0))) {
+			if (ret == 0) {
+				break;
+			} else {
+				return (0);
+			}
+		}
+		num_dns_servers = i + 1;
+	}
+
+	if (num_dns_servers == 0) {
+		/* default DNS server */
+		inet_pton(AF_INET, "8.8.8.8", &(vdsp->vnds_dns_addrs[0]));
+		num_dns_servers = 1;
+	}
+	vdsp->vnds_num_dns_addrs = num_dns_servers;
 
 	if ((hostname = qemu_opt_get(opts, "hostname")) != NULL) {
 		ret = strlen(hostname);
 		if (ret > sizeof(vdsp->vnds_client_hostname)) {
 			error_report("hostname is too long\n");
-			return (-1);
+			return (0);
 		}
 		memcpy(&vdsp->vnds_client_hostname, hostname, ret);
 	} else {

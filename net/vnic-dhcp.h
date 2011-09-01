@@ -31,6 +31,7 @@
 #define	VNIC_BUFFSIZE	65536
 #define VNIC_DHCP_DEBUG 0
 #define VNIC_DHCP_HEX_DUMP 0
+#define VNIC_DHCP_NUM_RESOLVERS 4
 
 typedef struct VNICDHCPState {
 	unsigned int	vnds_enabled;
@@ -40,9 +41,10 @@ typedef struct VNICDHCPState {
 	struct in_addr	vnds_client_addr;
 	struct in_addr	vnds_netmask_addr;
 	struct in_addr	vnds_gw_addr;
-	struct in_addr	vnds_dns_addr;
+	struct in_addr	vnds_dns_addrs[VNIC_DHCP_NUM_RESOLVERS];
 	uint32_t	vnds_lease_time;
 	char		vnds_client_hostname[33];
+	unsigned int	vnds_num_dns_addrs;
 } VNICDHCPState;
 
 int create_dhcp_response(const uint8_t *buf_p, int pkt_len, VNICDHCPState *vdsp);

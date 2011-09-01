@@ -35,11 +35,11 @@ a VNIC and a ZVOL. The following is a sample configuration for qemu running a Li
         -smp 4 \
         -m 1024 \
         -vnc 0.0.0.0:0 \
-        -net nic,vlan=0,name=net0,model=virtio,macaddr=90:b8:d0:c0:ff:ee \
-        -net vnic,vlan=0,name=net0,ifname=eth0,macaddr=90:b8:d0:c0:ff:ee, \
-             ip=10.88.88.50,netmask=255.255.255.0,gateway_ip=10.88.88.2, \
-             server_ip=10.88.88.200,dns_ip=8.8.4.4,hostname=host1, \
-             lease_time=3600
+        -net nic,vlan=0,name=net0,model=virtio,macaddr=90:b8:d0:c0:ff:ee\
+        -net vnic,vlan=0,name=net0,ifname=eth0,macaddr=90:b8:d0:c0:ff:ee,\
+             ip=10.88.88.50,netmask=255.255.255.0,gateway_ip=10.88.88.2,\
+             server_ip=10.88.88.200,dns_ip0=8.8.4.4,dns_ip1=8.8.4.4,\
+	     hostname=host1,lease_time=3600 \
         -no-hpet \
         -chardev socket,id=serial0,path=/tmp/vm.console,server,nowait \
         -serial chardev:serial0 \
@@ -87,6 +87,9 @@ machine. To enable vnic dhcp, specify the following arguments:
   IP address of qemu's DHCP server.
 * __dns_ip__ (eg: 8.8.4.4) is optional, and allows specifying the DNS
   server the virtual machine will use.  The default value is 8.8.8.8.
+* __dns_ip0__, __dns_ip1__, __dns_ip2__, and __dns_ip3__ are optional,
+  and allow specifying a list of DNS servers, rather than just one.
+  These options override the dns_ip option.
 * __hostname__ (eg: myhostname) is optional. This defaults to no hostname.
 * __lease_time__ (eg: 3600) is optional, and allows specifying the DHCP
   lease time in seconds.  The default value is 86400 (or 1 day).
