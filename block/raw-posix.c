@@ -262,6 +262,16 @@ static int raw_pread_aligned(BlockDriverState *bs, int64_t offset,
     if (ret < 0)
         return ret;
 
+    /*
+     * In versions previous to 0.13.0 this code used lseek to seek to offset
+     * and read instead of pread.  The lseek only happened when offset was >=0
+     * with the change to pread the logic for checking whether offset was
+     * negative was lost which broke vmdk4 support.  This offset check here
+     * will have the same result as the old (working) code.
+     */
+    if (offset < 0)
+        offset = 0;
+
     ret = pread(s->fd, buf, count, offset);
     if (ret == count)
         return ret;
