@@ -435,11 +435,13 @@ populate_dhcp_reply(const struct bootp_t *bp, struct bootp_t *rbp,
 		}
 
 		// dns server list
-		*q++ = RFC1533_DNS;
-		*q++ = 4 * vdsp->vnds_num_dns_addrs;
-		for (i = 0; i < vdsp->vnds_num_dns_addrs; i++) {
-			memcpy(q, &vdsp->vnds_dns_addrs[i], sizeof(struct in_addr));
-			q += 4;
+		if (vdsp->vnds_num_dns_addrs > 0) {
+			*q++ = RFC1533_DNS;
+			*q++ = 4 * vdsp->vnds_num_dns_addrs;
+			for (i = 0; i < vdsp->vnds_num_dns_addrs; i++) {
+				memcpy(q, &vdsp->vnds_dns_addrs[i], sizeof(struct in_addr));
+				q += 4;
+			}
 		}
 
 		// lease time
