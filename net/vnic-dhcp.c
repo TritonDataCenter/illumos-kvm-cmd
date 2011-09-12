@@ -427,10 +427,12 @@ populate_dhcp_reply(const struct bootp_t *bp, struct bootp_t *rbp,
 		q += 4;
 
 		// default gw
-		*q++ = RFC1533_GATEWAY;
-		*q++ = 4;
-		memcpy(q, &vdsp->vnds_gw_addr, sizeof(struct in_addr));
-		q += 4;
+		if (vdsp->vnds_gw_addr.s_addr != 0) {
+			*q++ = RFC1533_GATEWAY;
+			*q++ = 4;
+			memcpy(q, &vdsp->vnds_gw_addr, sizeof(struct in_addr));
+			q += 4;
+		}
 
 		// dns server list
 		*q++ = RFC1533_DNS;
@@ -448,10 +450,12 @@ populate_dhcp_reply(const struct bootp_t *bp, struct bootp_t *rbp,
 
 		// hostname
 		val = strlen(vdsp->vnds_client_hostname);
-		*q++ = RFC1533_HOSTNAME;
-		*q++ = val;
-		memcpy(q, &vdsp->vnds_client_hostname, val);
-		q += val;
+		if (val > 0) {
+			*q++ = RFC1533_HOSTNAME;
+			*q++ = val;
+			memcpy(q, &vdsp->vnds_client_hostname, val);
+			q += val;
+		}
 	} else {
 		static const char nak_msg[] = "requested address not available";
 
@@ -676,8 +680,9 @@ vnic_dhcp_init(VNICDHCPState *vdsp, QemuOpts *opts)
 		}
 	}
 
-	if (!qemu_ip_opt(opts, "gateway_ip", &(vdsp->vnds_gw_addr), 1))
-		return (0);
+	if (!qemu_ip_opt(opts, "gateway_ip", &(vdsp->vnds_gw_addr), 0)) {
+		vdsp->vnds_gw_addr.s_addr = 0;
+	}
 
 	if ((ret = qemu_ip_opt(opts, "dns_ip", &(vdsp->vnds_dns_addrs[0]), 0)) != 0) {
 		if (ret == -1)
@@ -695,12 +700,6 @@ vnic_dhcp_init(VNICDHCPState *vdsp, QemuOpts *opts)
 			}
 		}
 		num_dns_servers = i + 1;
-	}
-
-	if (num_dns_servers == 0) {
-		/* default DNS server */
-		inet_pton(AF_INET, "8.8.8.8", &(vdsp->vnds_dns_addrs[0]));
-		num_dns_servers = 1;
 	}
 	vdsp->vnds_num_dns_addrs = num_dns_servers;
 
