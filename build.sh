@@ -31,6 +31,7 @@ fi
 
 echo "==> Running configure"
 ./configure \
+	  --cc=/usr/sfw/bin/gcc \
     --extra-cflags="-I${PNGDIR}/proto/usr/local/include" \
     --extra-ldflags="-L${PNGDIR}/proto/usr/local/lib -lz -lm" \
     --prefix=/smartdc \
