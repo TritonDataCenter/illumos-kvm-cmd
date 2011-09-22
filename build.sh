@@ -12,7 +12,7 @@ PNGINC="${PNGDIR}/proto/usr/local/include"
 PNGLIB="${PNGDIR}/proto/usr/local/lib"
 
 if [[ ! -d ${PNGDIR} ]]; then
-    (curl ftp://ftp.simplesystems.org/pub/libpng/png/src/libpng-1.5.4.tar.gz | \
+    (curl -k https://download.joyent.com/pub/kvm-cmd/libpng-1.5.4.tar.gz | \
         gtar -zxf -)
     if [[ $? != "0" || ! -d ${PNGDIR} ]]; then
         echo "Failed to get libpng."
