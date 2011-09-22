@@ -26,8 +26,13 @@ world:
 update:
 	git pull --rebase
 
+manifest:
+	cp manifest $(DESTDIR)/$(DESTNAME)
+
 install: world
 	DESTDIR=$(DESTDIR) gmake install
 
 clean:
 	gmake clean
+
+.PHONY: manifest 
