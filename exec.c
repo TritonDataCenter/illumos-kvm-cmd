@@ -2828,6 +2828,72 @@ static ram_addr_t last_ram_offset(void)
     return last;
 }
 
+#ifdef CONFIG_SOLARIS
+static int
+qemu_mlock(caddr_t base, ram_addr_t size)
+{
+	ram_addr_t ps = qemu_real_host_page_size, nbytes, locked = 0;
+	ram_addr_t remaining = size / ps;
+	ram_addr_t step = remaining;
+	timespec_t tv;
+	hrtime_t waiting = 0, threshold;
+
+	tv.tv_sec = 0;
+	tv.tv_nsec = NANOSEC / MILLISEC;
+	threshold = 10 * (hrtime_t)NANOSEC;
+
+	/*
+	 * We cannot lock memory with a single call to mlock() because it
+	 * won't result in sustained memory pressure:  if there is a
+	 * substantial amount of kernel memory in use electively (e.g., for
+	 * the ARC) a single call to mlock() may fail where sustained memory
+	 * pressure would succeed.  We therefore start by trying to lock the
+	 * entire region, adjusting our size down as we fail with EAGAIN; once
+	 * we successfully lock a portion of the region, we advance to the
+	 * unlocked portion of the region (if any remains) and increase the
+	 * size.  Note that this will continue to hoard memory until it locks
+	 * what it needs -- it won't give up.  To help debug situations in
+	 * which one has mistakenly overprovisioned, we emit a message every
+	 * ten seconds with no forward progress.
+	 */ 
+	while (remaining) {
+		if (step > remaining)
+			step = remaining;
+
+		while (mlock(base, (nbytes = step * ps)) == -1) {
+			if (errno != EAGAIN)
+				return (-1);
+
+			if (waiting == 0)
+				waiting = gethrtime();
+
+			if (step > 1) {
+				step >>= 1;
+				continue;
+			}
+
+			(void) nanosleep(&tv, NULL);
+
+			if (gethrtime() - waiting > threshold) {
+				(void) fprintf(stderr, "qemu_mlock: have only "
+				    "locked %ld of %ld bytes; still "
+				    "trying...\n", locked, size);
+				waiting = 0;
+			}
+		}
+
+		waiting = 0;
+		base += nbytes;
+		locked += nbytes;
+		remaining -= step;
+
+		step <<= 1;
+	}
+
+	return (0);
+}
+#endif
+
 ram_addr_t qemu_ram_alloc_from_ptr(DeviceState *dev, const char *name,
                                    ram_addr_t size, void *host)
 {
@@ -2883,7 +2949,7 @@ ram_addr_t qemu_ram_alloc_from_ptr(DeviceState *dev, const char *name,
 	 * revisited if we implement mmu notifiers in the kernel.
 	 * Note also that pages are touched in kvm_set_user_memory_region.
 	 */
-	if (mlock(new_block->host, size) != 0) {
+	if (qemu_mlock(new_block->host, size) != 0) {
 		fprintf(stderr, "qemu_ram_alloc: Could not lock %ld memory, errno = %d\n",
 		      size, errno);
 		exit(1);
