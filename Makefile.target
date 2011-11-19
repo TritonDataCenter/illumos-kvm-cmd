@@ -378,7 +378,8 @@ obj-y += $(addprefix ../, $(trace-obj-y))
 obj-$(CONFIG_GDBSTUB_XML) += gdbstub-xml.o
 
 #
-# Uh, ctfconvert and ctfmerge are in our paths... right...
+# Uh, ctfconvert and ctfmerge are in our paths... right... I promise I'll clean
+# this up.
 #
 
 ifeq ($(TRACE_BACKEND),dtrace)
