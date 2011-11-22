@@ -19,9 +19,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
+KERNEL_SOURCE=$(PWD)/../../illumos
+CTFBINDIR=$(KERNEL_SOURCE)/usr/src/tools/proto/*/opt/onbld/bin/i386
 
 world:
-	./build.sh
+	echo "Building world"
+	PATH=$(PATH):$(CTFBINDIR) ./build.sh
 
 update:
 	git pull --rebase
@@ -30,7 +33,8 @@ manifest:
 	cp manifest $(DESTDIR)/$(DESTNAME)
 
 install: world
-	DESTDIR=$(DESTDIR) gmake install
+	echo "Building install"
+	DESTDIR=$(DESTDIR) PATH=$(PATH):$(CTFBINDIR) gmake install
 
 clean:
 	gmake clean
