@@ -870,7 +870,7 @@ static int dynticks_start_timer(struct qemu_alarm_timer *t)
     ev.sigev_notify = SIGEV_SIGNAL;
     ev.sigev_signo = SIGALRM;
 
-    if (timer_create(CLOCK_REALTIME, &ev, &host_timer)) {
+    if (timer_create(CLOCK_HIGHRES, &ev, &host_timer)) {
         perror("timer_create");
 
         /* disable dynticks */
