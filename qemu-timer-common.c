@@ -51,7 +51,7 @@ static void __attribute__((constructor)) init_get_clock(void)
     use_rt_clock = 0;
 #if defined(__linux__) || (defined(__FreeBSD__) && __FreeBSD_version >= 500000) \
     || defined(__DragonFly__) || defined(__FreeBSD_kernel__) \
-    || defined(__OpenBSD__)
+    || defined(__OpenBSD__) || defined (__sun__)
     {
         struct timespec ts;
         if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {

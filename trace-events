@@ -38,6 +38,15 @@ disable qemu_memalign(size_t alignment, size_t size, void *ptr) "alignment %zu s
 disable qemu_vmalloc(size_t size, void *ptr) "size %zu ptr %p"
 disable qemu_vfree(void *ptr) "ptr %p"
 
+# qemu-timer.c
+disable qemu_mod_timer(void *ptr, int64_t expire, int64_t interval) "ptr %p expire %d interval %d"
+disable qemu_run_timer(void *ptr, int64_t expire, int64_t current_time) "ptr %p expire %d current_time %d"
+disable multiticks_assign(void *ptr, int source) "ptr %p source %d"
+disable multiticks_reap(int source, int64_t prog, int64_t interval) "source %d prog %d intrval %d"
+disable multiticks_program(void *ptr, int64_t expire, int64_t interval) "ptr %p expire %d interval %d"
+disable multiticks_inband(void *ptr, int64_t low, int64_t high, int64_t fire) "ptr %p low %d high %d fire %d"
+disable multiticks_outofband(void *ptr, int64_t low, int64_t high, int64_t fire) "ptr %p low %d high %d fire %d"
+
 # hw/virtio.c
 disable virtqueue_fill(void *vq, const void *elem, unsigned int len, unsigned int idx) "vq %p elem %p len %u idx %u"
 disable virtqueue_flush(void *vq, unsigned int count) "vq %p count %u"

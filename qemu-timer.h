@@ -87,6 +87,9 @@ extern int use_rt_clock;
 
 static inline int64_t get_clock(void)
 {
+#if defined(__sun__)
+    return gethrtime();
+#else
 #if defined(__linux__) || (defined(__FreeBSD__) && __FreeBSD_version >= 500000) \
     || defined(__DragonFly__) || defined(__FreeBSD_kernel__)
     if (use_rt_clock) {
@@ -100,6 +103,7 @@ static inline int64_t get_clock(void)
            changes, so it should be avoided. */
         return get_clock_realtime();
     }
+#endif
 }
 #endif
 
