@@ -1005,7 +1005,7 @@ static int multiticks_start_timer(struct qemu_alarm_timer *t)
     found = timeout.it_interval.tv_sec * NANOSEC + timeout.it_interval.tv_nsec;
 
     if (resolution != found) {
-        fprintf(stderr, "multitics: interval not properly honored "
+        fprintf(stderr, "multiticks: interval not properly honored "
             "(set to %lld; found %lld); disabling\n",
             (long long)resolution, (long long)found);
         multiticks_stop_timer(t);
