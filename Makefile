@@ -80,7 +80,7 @@ build-all: $(DOCS) $(TOOLS) recurse-all
 config-host.h: config-host.h-timestamp
 config-host.h-timestamp: config-host.mak
 qemu-options.def: $(SRC_PATH)/qemu-options.hx
-	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $@")
+	$(call quiet-command,bash $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $@")
 
 SUBDIR_RULES=$(patsubst %,subdir-%, $(TARGET_DIRS))
 
@@ -122,12 +122,12 @@ else
 trace.h: trace.h-timestamp
 endif
 trace.h-timestamp: $(SRC_PATH)/trace-events config-host.mak
-	$(call quiet-command,sh $(SRC_PATH)/scripts/tracetool --$(TRACE_BACKEND) -h < $< > $@,"  GEN   trace.h")
+	$(call quiet-command,bash $(SRC_PATH)/scripts/tracetool --$(TRACE_BACKEND) -h < $< > $@,"  GEN   trace.h")
 	@cmp -s $@ trace.h || cp $@ trace.h
 
 trace.c: trace.c-timestamp
 trace.c-timestamp: $(SRC_PATH)/trace-events config-host.mak
-	$(call quiet-command,sh $(SRC_PATH)/scripts/tracetool --$(TRACE_BACKEND) -c < $< > $@,"  GEN   trace.c")
+	$(call quiet-command,bash $(SRC_PATH)/scripts/tracetool --$(TRACE_BACKEND) -c < $< > $@,"  GEN   trace.c")
 	@cmp -s $@ trace.c || cp $@ trace.c
 
 trace.o: trace.c $(GENERATED_HEADERS)
@@ -140,7 +140,7 @@ trace-dtrace.h: trace-dtrace.dtrace
 # rule file. So we use '.dtrace' instead
 trace-dtrace.dtrace: trace-dtrace.dtrace-timestamp
 trace-dtrace.dtrace-timestamp: $(SRC_PATH)/trace-events config-host.mak
-	$(call quiet-command,sh $(SRC_PATH)/scripts/tracetool --$(TRACE_BACKEND) -d < $< > $@,"  GEN   trace-dtrace.dtrace")
+	$(call quiet-command,bash $(SRC_PATH)/scripts/tracetool --$(TRACE_BACKEND) -d < $< > $@,"  GEN   trace-dtrace.dtrace")
 	@cmp -s $@ trace-dtrace.dtrace || cp $@ trace-dtrace.dtrace
 
 trace-dtrace.o: trace-dtrace.dtrace $(GENERATED_HEADERS)
