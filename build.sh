@@ -31,11 +31,11 @@ fi
 
 echo "==> Running configure"
 KVM_DIR="${KVM_DIR:-$(cd `pwd`/../kvm; pwd)}"
-CC="${CC:-/usr/sfw/bin/gcc}"
+CC="${CC:-/opt/gcc/4.4.4/bin/gcc}"
 ./configure \
-	  --cc=$CC \
-    --extra-cflags="-I${PNGDIR}/proto/usr/local/include" \
-    --extra-ldflags="-L${PNGDIR}/proto/usr/local/lib -lz -lm" \
+    --cc=$CC \
+    --extra-cflags="-fno-builtin -nodefaultlibs -I${PNGDIR}/proto/usr/local/include" \
+    --extra-ldflags="-L${PNGDIR}/proto/usr/local/lib -lz -lm -lc" \
     --prefix=/smartdc \
     --audio-card-list= \
     --audio-drv-list= \
