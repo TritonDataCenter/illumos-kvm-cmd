@@ -30,8 +30,10 @@ if [[ ! -e ${PNGLIB}/libpng.a ]]; then
 fi
 
 echo "==> Running configure"
+KVM_DIR="${KVM_DIR:-$(cd `pwd`/../kvm; pwd)}"
+CC="${CC:-/usr/sfw/bin/gcc}"
 ./configure \
-	  --cc=/usr/sfw/bin/gcc \
+	  --cc=$CC \
     --extra-cflags="-I${PNGDIR}/proto/usr/local/include" \
     --extra-ldflags="-L${PNGDIR}/proto/usr/local/lib -lz -lm" \
     --prefix=/smartdc \
@@ -50,7 +52,7 @@ echo "==> Running configure"
     --disable-vnc-sasl \
     --disable-vnc-tls \
     --enable-trace-backend=dtrace \
-    --kerneldir=$(cd `pwd`/../kvm; pwd) \
+    --kerneldir="$KVM_DIR" \
     --cpu=x86_64
 
 if [[ $? != 0 ]]; then
@@ -62,9 +64,9 @@ fi
 #
 # Make sure ctf utilities are in our path
 #
-KERNEL_SOURCE=$(pwd)/../../illumos
-CTFBINDIR=$KERNEL_SOURCE/usr/src/tools/proto/root_i386-nd/opt/onbld/bin/i386
-export PATH=$PATH:$CTFBINDIR
+KERNEL_SOURCE="${KERNEL_SOURCE:-$(pwd)/../../illumos}"
+CTFBINDIR="$KERNEL_SOURCE"/usr/src/tools/proto/root_i386-nd/opt/onbld/bin/i386
+export PATH="$PATH:$CTFBINDIR"
 
 echo "==> Make"
 gmake
