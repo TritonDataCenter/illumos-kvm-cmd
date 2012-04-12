@@ -314,7 +314,19 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 		}
 	}
 
+	/*
+	 * We are enabling support for two different kinds of promiscuous modes.
+	 * The first is getting us the basics of the unicast traffic that we
+	 * care about. The latter is going to ensure that we also get other
+	 * types of physical traffic such as multicast and broadcast.
+	 */
 	if (dlpi_promiscon(vsp->vns_hdl, DL_PROMISC_SAP) != DLPI_SUCCESS) {
+		error_report("vnic: failed to be promiscous with interface %s",
+		    ifname);
+		return (-1);
+	}
+
+	if (dlpi_promiscon(vsp->vns_hdl, DL_PROMISC_PHYS) != DLPI_SUCCESS) {
 		error_report("vnic: failed to be promiscous with interface %s",
 		    ifname);
 		return (-1);
