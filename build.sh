@@ -4,7 +4,8 @@
 #
 
 for dir in seabios vgabios kvm/test; do
-    cp roms/${dir}/config.mak.tmpl roms/${dir}/config.mak
+	[[ ! -f roms/${dir}/config.mak.tmpl ]] || \
+	    cp roms/${dir}/config.mak.tmpl roms/${dir}/config.mak
 done
 
 PNGDIR="${PWD}/libpng-1.5.4"
@@ -23,7 +24,9 @@ fi
 
 if [[ ! -e ${PNGLIB}/libpng.a ]]; then
     (cd ${PNGDIR} && \
-        LDFLAGS=-m64 CFLAGS=-m64 ./configure --disable-shared && \
+	LDFLAGS="-m64 -L${DESTDIR}/usr/lib -L${DESTDIR}/lib" \
+	CPPFLAGS="-isystem ${DESTDIR}/usr/include" \
+	CFLAGS="-m64" ./configure --disable-shared && \
         make && \
         mkdir -p ${PNGDIR}/proto && \
         make DESTDIR=${PNGDIR}/proto install)
@@ -31,11 +34,14 @@ fi
 
 echo "==> Running configure"
 KVM_DIR="${KVM_DIR:-$(cd `pwd`/../kvm; pwd)}"
-CC="${CC:-/opt/gcc/4.4.4/bin/gcc}"
+CC="${CC:-${DESTDIR}/usr/bin/gcc}"
+XCFLAGS="-fno-builtin -I${PNGINC} -isystem ${DESTDIR}/usr/include"
+XLDFLAGS="-nodefaultlibs -L${PNGLIB} -L${DESTDIR}/usr/lib -L${DESTDIR}/lib"
+XLDFLAGS="${XLDFLAGS} -lz -lm -lc"
 ./configure \
     --cc=$CC \
-    --extra-cflags="-fno-builtin -nodefaultlibs -I${PNGDIR}/proto/usr/local/include" \
-    --extra-ldflags="-L${PNGDIR}/proto/usr/local/lib -lz -lm -lc" \
+    --extra-cflags="${XCFLAGS}" \
+    --extra-ldflags="${XLDFLAGS}" \
     --prefix=/smartdc \
     --audio-card-list= \
     --audio-drv-list= \
