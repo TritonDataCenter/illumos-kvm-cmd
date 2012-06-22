@@ -24,7 +24,8 @@ fi
 
 if [[ ! -e ${PNGLIB}/libpng.a ]]; then
     (cd ${PNGDIR} && \
-	LDFLAGS="-m64 -L${DESTDIR}/usr/lib -L${DESTDIR}/lib" \
+	CC="${CC:-${DESTDIR}/usr/bin/gcc}" \
+	LDFLAGS="-m64 -L${DESTDIR}/usr/lib/amd64 -L${DESTDIR}/lib/amd64" \
 	CPPFLAGS="-isystem ${DESTDIR}/usr/include" \
 	CFLAGS="-m64" ./configure --disable-shared && \
         make && \
