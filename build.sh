@@ -75,5 +75,9 @@ KERNEL_SOURCE="${KERNEL_SOURCE:-$(pwd)/../../illumos}"
 CTFBINDIR="$KERNEL_SOURCE"/usr/src/tools/proto/root_i386-nd/opt/onbld/bin/i386
 export PATH="$PATH:$CTFBINDIR"
 
-echo "==> Make"
-gmake
+if [[ -z "CONFIGURE_ONLY" ]]; then
+	echo "==> Make"
+	gmake
+else
+	echo "Not running make per-request"
+fi

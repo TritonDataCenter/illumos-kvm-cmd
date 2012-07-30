@@ -25,6 +25,8 @@ QEMU_DGFLAGS += -MMD -MP -MT $@ -MF $(*D)/$(*F).d
 
 LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(1) $(LIBS),"  LINK  $(TARGET_DIR)$@")
 
+CTFMERGE = $(call quiet-command, $$(which ctfmerge) -L VERSION -o $@ $(1),"  CTFMERGE  $(TARGET_DIR)$@")
+
 ifeq ($(TRACE_BACKEND),dtrace)
 ifneq ($(strip $(CONFIG_SOLARIS)),)
 %$(EXESUF): %.o

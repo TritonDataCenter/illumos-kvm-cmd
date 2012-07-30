@@ -19,12 +19,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
+
 KERNEL_SOURCE=$(PWD)/../../illumos
 CTFBINDIR=$(KERNEL_SOURCE)/usr/src/tools/proto/*/opt/onbld/bin/i386
 
-world:
+world: config-host.mak
 	echo "Building world"
-	PATH=$(PATH):$(CTFBINDIR) ./build.sh
+	PATH=$(CTFBINDIR):$(PATH) V=1 gmake all
+
+config-host.mak:
+	PATH=$(CTFBINDIR):$(PATH) CONFIGURE_ONLY=1 ./build.sh
 
 update:
 	git pull --rebase
@@ -34,7 +38,7 @@ manifest:
 
 install: world
 	echo "Building install"
-	DESTDIR=$(DESTDIR) PATH=$(PATH):$(CTFBINDIR) gmake install
+	DESTDIR=$(DESTDIR) PATH=$(CTFBINDIR):$(PATH) V=1 gmake install
 
 clean:
 	gmake clean
