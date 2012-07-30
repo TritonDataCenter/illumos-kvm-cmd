@@ -43,4 +43,8 @@ install: world
 clean:
 	gmake clean
 
-.PHONY: manifest 
+xref:
+	find . -type f -name '*.[ch]' > cscope.files
+	cscope-fast -bq
+
+.PHONY: manifest xref
