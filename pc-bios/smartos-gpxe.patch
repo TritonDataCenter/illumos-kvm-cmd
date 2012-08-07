@@ -1,0 +1,112 @@
+diff --git a/src/arch/i386/image/multiboot.c b/src/arch/i386/image/multiboot.c
+index 5b62095..a581318 100644
+--- a/src/arch/i386/image/multiboot.c
++++ b/src/arch/i386/image/multiboot.c
+@@ -37,6 +37,7 @@ FILE_LICENCE ( GPL2_OR_LATER );
+ #include <gpxe/elf.h>
+ #include <gpxe/init.h>
+ #include <gpxe/features.h>
++#include <gpxe/umalloc.h>
+ 
+ FEATURE ( FEATURE_IMAGE, "Multiboot", DHCP_EB_FEATURE_MULTIBOOT, 1 );
+ 
+@@ -416,6 +417,44 @@ static int multiboot_load_elf ( struct image *image ) {
+ 	return 0;
+ }
+ 
++static void multiboot_solaris_workarounds (  struct image *image ) {
++	Elf32_Ehdr ehdr;
++
++	if ( image->len < sizeof (ehdr) )
++		return;
++
++	copy_from_user( &ehdr, image->data, 0, sizeof (ehdr) );
++
++	if ( memcmp ( &ehdr.e_ident[EI_MAG0], ELFMAG, SELFMAG ) != 0 ||
++		       ehdr.e_ident[EI_OSABI] != ELFOSABI_SOLARIS )
++		return;
++
++	DBGC ( image, "MULTIBOOT %p: applying Solaris workarounds\n", image );
++
++	/* Solaris expects a full path containing the architecture, not just
++	 * the filename of the kernel
++         */
++	if ( ehdr.e_ident[EI_CLASS] == ELFCLASS64 ) {
++		strncpy ( image->name, "/platform/i86pc/kernel/amd64/unix",
++			sizeof (image->name) );
++	} else {
++		strncpy ( image->name, "/platform/i86pc/kernel/unix",
++			sizeof (image->name) );
++	}
++
++	/* Solaris's pre-kernel routine expects to have a free memory region
++ 	 * directly after the ramdisk.  However, gPXE allocates memory from
++	 * high addresses to low, causing the ramdisk to be placed directly
++	 * before the kernel in memory. To workaround this, we allocate a
++	 * chunk of memory here, opening up a free memory region between the
++	 * kernel and ramdisk.  Note that the size of this region must be
++	 * balanced:  it must be large enough for Solaris to boot without
++	 * being so large that an important class of machines is rendered
++	 * unbootable.  For now, 128MB seems to hit that sweet spot.
++	 */
++       urealloc( UNULL, 128 * 1024 * 1024 );
++}
++
+ /**
+  * Load multiboot image into memory
+  *
+@@ -455,6 +494,8 @@ static int multiboot_load ( struct image *image ) {
+ 	     ( ( rc = multiboot_load_raw ( image, &hdr ) ) != 0 ) )
+ 		return rc;
+ 
++	multiboot_solaris_workarounds( image );
++
+ 	return 0;
+ }
+ 
+diff --git a/src/include/elf.h b/src/include/elf.h
+index 04022b6..63bed89 100644
+--- a/src/include/elf.h
++++ b/src/include/elf.h
+@@ -138,6 +138,28 @@ FILE_LICENCE ( GPL2_OR_LATER );
+ #define EI_VERSION	6	/* File version byte index */
+ 				/* Value must be EV_CURRENT */
+ 
++#define EI_OSABI	7	/* OS ABI byte index */
++
++#define ELFOSABI_NONE		0       /* No extensions or unspecified */
++#define ELFOSABI_SYSV		ELFOSABI_NONE
++#define ELFOSABI_HPUX		1	/* Hewlett-Packard HP-UX */
++#define ELFOSABI_NETBSD		2	/* NetBSD */
++#define ELFOSABI_LINUX		3	/* Linux */
++#define ELFOSABI_HURD		4	/* Hurd */
++#define ELFOSABI_86OPEN		5	/* 86Open common IA32 ABI */
++#define ELFOSABI_SOLARIS	6	/* Sun Solaris */
++#define ELFOSABI_AIX		7	/* AIX */
++#define ELFOSABI_IRIX		8	/* IRIX */
++#define ELFOSABI_FREEBSD	9	/* FreeBSD */
++#define ELFOSABI_TRU64		10	/* TRU64 UNIX */
++#define ELFOSABI_MODESTO	11	/* Novell Modesto */
++#define ELFOSABI_OPENBSD	12	/* Open BSD */
++#define ELFOSABI_OPENVMS	13	/* Open VMS */
++#define ELFOSABI_NSK		14	/* Hewlett-Packard Non-Stop Kernel */
++#define ELFOSABI_AROS		15	/* Amiga Research OS */
++#define ELFOSABI_ARM		97	/* ARM */
++#define ELFOSABI_STANDALONE	255	/* standalone (embedded) application */
++
+ #define EV_NONE		0	/* Invalid ELF Version */
+ #define EV_CURRENT	1	/* Current version */
+ 
+diff --git a/src/include/gpxe/image.h b/src/include/gpxe/image.h
+index 10db8af..702ad45 100644
+--- a/src/include/gpxe/image.h
++++ b/src/include/gpxe/image.h
+@@ -29,7 +29,7 @@ struct image {
+ 	/** URI of image */
+ 	struct uri *uri;
+ 	/** Name */
+-	char name[16];
++	char name[256];
+ 	/** Flags */
+ 	unsigned int flags;
+ 
