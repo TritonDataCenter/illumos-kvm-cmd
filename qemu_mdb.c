@@ -78,6 +78,42 @@ typedef struct RAMList {
 	QLIST_HEAD(ram, RAMBlock) blocks;
 } RAMList;
 
+typedef struct VRingDesc
+{
+    uint64_t addr;
+    uint32_t len;
+    uint16_t flags;
+    uint16_t next;
+} VRingDesc;
+
+typedef struct VRingAvail
+{
+    uint16_t flags;
+    uint16_t idx;
+    uint16_t ring[0];
+} VRingAvail;
+
+typedef struct VRingUsedElem
+{
+    uint32_t id;
+    uint32_t len;
+} VRingUsedElem;
+
+typedef struct VRingUsed
+{
+    uint16_t flags;
+    uint16_t idx;
+    VRingUsedElem ring[0];
+} VRingUsed;
+
+typedef struct VRing
+{
+    unsigned int num;
+    target_phys_addr_t desc;
+    target_phys_addr_t avail;
+    target_phys_addr_t used;
+} VRing;
+
 /*
  * NDEVICES comes from the PCIDevice structure and should be changed if this
  * does ever change.
@@ -438,19 +474,13 @@ qemu_mdb_get_ram_ptr(uintptr_t addr)
 }
 
 static int
-qemu_mdb_tpa2qva(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
+internal_tpa2qva(uintptr_t addr, uintptr_t *res)
 {
 	GElf_Sym sym;
 	void **lp, **p;
 	int ii;
 	PhysPageDesc *pdp, pd;
 	uintptr_t paddr, pfaddr, vptr;
-
-	if (!(flags & DCMD_ADDRSPEC))
-		return (DCMD_USAGE);
-
-	if (argc > 1)
-		return (DCMD_USAGE);
 
 	if (mdb_lookup_by_name("l1_phys_map", &sym) != 0) {
 		mdb_warn("unable to locate host_buse");
@@ -502,8 +532,95 @@ qemu_mdb_tpa2qva(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 	if (vptr == 0)
 		return (DCMD_ERR);
 	vptr += addr & ~MDB_TARGET_PAGE_MASK;
+	*res = vptr;
+
+	return (DCMD_OK);
+}
+
+static int
+qemu_mdb_tpa2qva(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
+{
+	uintptr_t vptr;
+
+	if (!(flags & DCMD_ADDRSPEC))
+		return (DCMD_USAGE);
+
+	if (argc > 1)
+		return (DCMD_USAGE);
+
+	if (internal_tpa2qva(addr, &vptr) != DCMD_OK)
+		return (DCMD_ERR);
+
 	mdb_printf("%lr\n", vptr);
 
+	return (DCMD_OK);
+}
+
+static int
+qemu_mdb_vrused(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
+{
+	VRing ring;
+	uintptr_t avaddr;
+	uint16_t index;
+
+	if (!(flags & DCMD_ADDRSPEC))
+		return (DCMD_USAGE);
+
+	if (argc > 1)
+		return (DCMD_USAGE);
+
+	if (mdb_vread(&ring, sizeof (ring), addr) != sizeof (ring)) {
+		mdb_warn("failed to read VRing");
+		return (DCMD_ERR);
+	}
+
+	if (internal_tpa2qva(ring.avail, &avaddr) != DCMD_OK) {
+		mdb_warn("failed to translate available ring to VA");
+		return (DCMD_ERR);
+	}
+
+	/* Account for offset */
+	avaddr += ring.num * sizeof (uint16_t) + 0x4;
+	if (mdb_vread(&index, sizeof (index), avaddr) != sizeof (index)) {
+		mdb_warn("failed to read index value");
+		return (DCMD_ERR);
+	}
+
+	mdb_printf("%lr\n", index);
+	return (DCMD_OK);
+}
+
+static int
+qemu_mdb_vravail(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
+{
+	VRing ring;
+	uintptr_t avaddr;
+	uint16_t index;
+
+	if (!(flags & DCMD_ADDRSPEC))
+		return (DCMD_USAGE);
+
+	if (argc > 1)
+		return (DCMD_USAGE);
+
+	if (mdb_vread(&ring, sizeof (ring), addr) != sizeof (ring)) {
+		mdb_warn("failed to read VRing");
+		return (DCMD_ERR);
+	}
+
+	if (internal_tpa2qva(ring.used, &avaddr) != DCMD_OK) {
+		mdb_warn("failed to translate available ring to VA");
+		return (DCMD_ERR);
+	}
+
+	/* Account for offset */
+	avaddr += ring.num * sizeof (uint64_t) + 0x4;
+	if (mdb_vread(&index, sizeof (index), avaddr) != sizeof (index)) {
+		mdb_warn("failed to read index value");
+		return (DCMD_ERR);
+	}
+
+	mdb_printf("%lr\n", index);
 	return (DCMD_OK);
 }
 
@@ -512,6 +629,10 @@ static const mdb_dcmd_t qemu_dcmds[] = {
 		"virtio equivalent", qemu_mdb_pcidev2virtio },
 	{ "qemu_tpa2qva", NULL, "translate a target physical address to a "
 		"QEMU virtual address", qemu_mdb_tpa2qva },
+	{ "qemu_vrused", NULL, "Spit out the used event of the vring",
+		qemu_mdb_vrused },
+	{ "qemu_vravail", NULL, "Spit out the avail event of the vring",
+		qemu_mdb_vravail },
 	{ NULL }
 };
 
