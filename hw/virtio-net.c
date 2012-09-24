@@ -26,6 +26,89 @@
 #define MAC_TABLE_ENTRIES    64
 #define MAX_VLAN    (1 << 12)   /* Per 802.1Q definition */
 
+/*
+ * Unfortunately some guest virtio drivers are a little racy with respect to
+ * when they notify us and when they unmask their respective interrupts.
+ * Currently we have to work around this in QEMU. While OSes normally work
+ * around pathological devices, virtual devices here will have to work around
+ * virtual hardware. To put this more concretely, a Linux guest will notify the
+ * host to do processing work before it unmasks interrupts. Therefore, by the
+ * time that we get to virtio_notify interrupts on the available ring won't be
+ * unmasked so we won't inject the interrupt, but the guest will instead wait
+ * indefinitely for one. This leads to us losing data.
+ *
+ * We need to note whether or not we injected an interrupt during a
+ * virtio_notify. If we did not and either of the following conditions about the
+ * ring buffers are true:
+ * 
+ * o The last available index processed equals the used index
+ * o The last available index processed does not equal the current
+ *   available index
+ * 
+ * If this is the case, then we set up a small timer that runs for 500 ticks,
+ * each tick is 10ms long. If we reach 500 ticks, then we just ignore it. This
+ * is actually a valid position because the guest could have transmitted a small
+ * amount of packets, but not enough to actually cause it to need injection. If
+ * we get notified, aka hit virtio_net_handle_tx_timer, then we stop the timer,
+ * because we're about to do processing that may inject an interrupt. Finally,
+ * if on a tick we check two different conditions. The first is to see if the
+ * last processed available ring index is not equal to the current available
+ * ring index. If that is true, then we effectively call virtqueue_flush as
+ * virtio_net_tx_timer would.  Finally we check if the last available ring index
+ * is equal to the used ring index and interrupts are not masked. If this is the
+ * case, then we simply inject the interrupt and continue.
+ * 
+ * This is summarized by the following rough state transition diagram:
+ *       
+ *                                    Otherwise     +---+
+ *  virtqueue_ --+                    increment +---*   |
+ *  flush()      |                    tick count   \|/  |  + avail ring
+ *  finishes     |                     +-------------+  |  | index >
+ *  without  +---*-------------------->|             |--+  | last avail 
+ *  injecting|                         |   Timer     |     | index pro-
+ *  an intr. |     +-----*-------------|   Active    |     | cessed
+ *           |     |     |             |             |-----*-----------+
+ *           |     |     |             +-------------+                 |
+ *           |     |     +- 500 ticks    |     |                       |
+ *           |     |        elapse       |     *--+ Avail ring         |
+ *           |    \|/                    |     |    unmasked           |
+ *         +-------------+               |     |                       |
+ *         |             |<--*-----------+     |     +--------+        |
+ *         |   Timer     |   |                 |     |        |        |
+ *         |   Inactive  |   +- virtio_net_    +---->| Inject |        |
+ *         |             |      handle_tx_           | MSI/x  |        |
+ *         +-------------+      timer() runs         |        |        |
+ *           ^      ^                                +--------+        |
+ *           |      |                       +- always    |             |
+ *           |      |                       |            |             |
+ *           |      +-----------------------*------------+             |
+ *           |                                                         |
+ *           |               +- always       +------------------+      |
+ *           |               |               |                  |      |
+ *           +---------------*---------------| Flush Virtqueues |<-----+
+ *                                           |                  |
+ *                                           +------------------+
+ */
+
+
+#define	REINJECT_TICK_RATE	(10000000)	/* 10ms in ns */	
+#define REINJECT_DEADMAN	500		/* 5s in ticks */
+
+typedef enum rein_act {
+	REIN_INJECT,
+	REIN_DEADMAN,
+	REIN_RUN
+} rein_act_t;
+
+#define	REIN_RING_MAX	64
+
+typedef struct rein_event {
+	rein_act_t 	re_act;
+	hrtime_t	re_time;
+	uint64_t	re_other;
+	struct timeval	re_tval;
+} rein_event_t;
+
 typedef struct VirtIONet
 {
     VirtIODevice vdev;
@@ -63,7 +146,77 @@ typedef struct VirtIONet
     } mac_table;
     uint32_t *vlans;
     DeviceState *qdev;
+    QEMUTimer *rein_timer;
+    uint32_t rein_timer_ticks;
+    uint8_t rein_timer_act;
+    uint32_t rein_ring_idx;
+    rein_event_t rein_ring[REIN_RING_MAX];
+    uint64_t rein_n_dead;
+    uint64_t rein_n_inject;
+    uint64_t rein_n_rerun;
 } VirtIONet;
+
+static void virtio_net_handle_tx_timer(VirtIODevice *, VirtQueue *);
+
+static void virtio_net_rein_event(VirtIONet *n, rein_act_t act, uint64_t other)
+{
+	int index = n->rein_ring_idx;
+	n->rein_ring_idx = (n->rein_ring_idx + 1) % REIN_RING_MAX;
+	rein_event_t *rep = n->rein_ring + index;
+	rep->re_time = gethrtime();
+	rep->re_act = act;
+	rep->re_other = other;
+	(void) gettimeofday(&rep->re_tval, NULL);
+}
+
+static void virtio_net_rein_disable(VirtIONet *n)
+{
+	qemu_del_timer(n->rein_timer);
+	n->rein_timer_act = 0;
+}
+
+static void virtio_net_rein_enable(VirtIONet *n)
+{
+	n->rein_timer_ticks = 0;
+	qemu_mod_timer(n->rein_timer,
+	    qemu_get_clock(vm_clock) + REINJECT_TICK_RATE);
+	n->rein_timer_act = 1;
+}
+
+static void virtio_net_rein_tick(void *opaque)
+{
+	int ret;
+	VirtIONet *n = opaque;
+	assert(n->rein_timer_act);
+
+	n->rein_timer_ticks++;
+
+	/* Give up, this may be completely reasonable */
+	if (n->rein_timer_ticks > REINJECT_DEADMAN) {
+		virtio_net_rein_event(n, REIN_DEADMAN, n->rein_timer_ticks);
+		virtio_net_rein_disable(n);
+		n->rein_n_dead++;
+		return;
+	}
+
+	ret = virtqueue_stalled(n->tx_vq);
+	if (ret == 1) {
+		virtio_net_rein_event(n, REIN_INJECT, n->rein_timer_ticks);
+		virtio_net_rein_disable(n);
+		n->rein_n_inject++;
+		return;
+	} else if (ret == 2) {
+		virtio_net_rein_event(n, REIN_RUN, n->rein_timer_ticks);
+		virtio_net_rein_disable(n);
+		virtio_net_handle_tx_timer(&n->vdev, n->tx_vq);
+		n->rein_n_rerun++;
+		return;
+	}
+
+	assert(ret == 0);
+	qemu_mod_timer(n->rein_timer,
+	    qemu_get_clock(vm_clock) + REINJECT_TICK_RATE);
+}
 
 /* TODO
  * - we could suppress RX interrupt if we were so inclined.
@@ -707,6 +860,7 @@ static int32_t virtio_net_flush_tx(VirtIONet *n, VirtQueue *vq)
 {
     VirtQueueElement elem;
     int32_t num_packets = 0;
+    int32_t inject = 1;
     if (!(n->vdev.status & VIRTIO_CONFIG_S_DRIVER_OK)) {
         return num_packets;
     }
@@ -758,12 +912,16 @@ static int32_t virtio_net_flush_tx(VirtIONet *n, VirtQueue *vq)
         len += ret;
 
         virtqueue_push(vq, &elem, len);
-        virtio_notify(&n->vdev, vq);
+        inject = virtio_notify(&n->vdev, vq);
 
         if (++num_packets >= n->tx_burst) {
             break;
         }
     }
+
+    if (inject == 0 && virtqueue_handled(vq))
+	    virtio_net_rein_enable(n);
+
     return num_packets;
 }
 
@@ -776,6 +934,16 @@ static void virtio_net_handle_tx_timer(VirtIODevice *vdev, VirtQueue *vq)
         n->tx_waiting = 1;
         return;
     }
+
+    /*
+     * Kill the broken guest timer. The reason we are here is because the guest
+     * has kicked us to send packets therefore we don't need to go back and
+     * consider injecting it with interrupts because we will do that again
+     * naturally. We also don't reset 
+     */
+    if (n->rein_timer_act)
+	    virtio_net_rein_disable(n);
+
 
     if (n->tx_waiting) {
         virtio_queue_set_notification(vq, 1);
@@ -1024,6 +1192,12 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
         n->tx_vq = virtio_add_queue(&n->vdev, 256, virtio_net_handle_tx_bh);
         n->tx_bh = qemu_bh_new(virtio_net_tx_bh, n);
     }
+    n->rein_timer = qemu_new_timer(vm_clock, virtio_net_rein_tick, n);
+    n->rein_ring_idx = 0;
+    bzero(n->rein_ring, sizeof (rein_event_t) * REIN_RING_MAX);
+    n->rein_n_dead = 0;
+    n->rein_n_inject = 0;
+    n->rein_n_rerun = 0;
     n->ctrl_vq = virtio_add_queue(&n->vdev, 64, virtio_net_handle_ctrl);
     qemu_macaddr_default_if_unset(&conf->macaddr);
     memcpy(&n->mac[0], &conf->macaddr, sizeof(n->mac));

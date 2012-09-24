@@ -153,7 +153,7 @@ void virtqueue_map_sg(struct iovec *sg, target_phys_addr_t *addr,
 int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem);
 int virtqueue_avail_bytes(VirtQueue *vq, int in_bytes, int out_bytes);
 
-void virtio_notify(VirtIODevice *vdev, VirtQueue *vq);
+int virtio_notify(VirtIODevice *vdev, VirtQueue *vq);
 
 void virtio_save(VirtIODevice *vdev, QEMUFile *f);
 
@@ -226,4 +226,6 @@ EventNotifier *virtio_queue_get_guest_notifier(VirtQueue *vq);
 EventNotifier *virtio_queue_get_host_notifier(VirtQueue *vq);
 void virtio_queue_notify_vq(VirtQueue *vq);
 void virtio_irq(VirtQueue *vq);
+int virtqueue_stalled(VirtQueue *vq);
+int virtqueue_handled(VirtQueue *vq);
 #endif

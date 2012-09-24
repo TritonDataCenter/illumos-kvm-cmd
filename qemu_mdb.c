@@ -114,6 +114,69 @@ typedef struct VRing
     target_phys_addr_t used;
 } VRing;
 
+/* Sigh More definitions ... */
+typedef enum rein_act {
+	REIN_INJECT,
+	REIN_DEADMAN,
+	REIN_RUN
+} rein_act_t;
+
+#define	REIN_RING_MAX	64
+
+typedef struct rein_event {
+	rein_act_t 	re_act;
+	hrtime_t	re_time;
+	uint64_t	re_other;
+	struct timeval	re_tval;
+} rein_event_t;
+
+typedef struct VirtIONet
+{
+    VirtIODevice vdev;
+    uint8_t mac[ETH_ALEN];
+    uint16_t status;
+    VirtQueue *rx_vq;
+    VirtQueue *tx_vq;
+    VirtQueue *ctrl_vq;
+    NICState *nic;
+    QEMUTimer *tx_timer;
+    QEMUBH *tx_bh;
+    uint32_t tx_timeout;
+    int32_t tx_burst;
+    int tx_waiting;
+    uint32_t has_vnet_hdr;
+    uint8_t has_ufo;
+    struct {
+        VirtQueueElement elem;
+        ssize_t len;
+    } async_tx;
+    int mergeable_rx_bufs;
+    uint8_t promisc;
+    uint8_t allmulti;
+    uint8_t alluni;
+    uint8_t nomulti;
+    uint8_t nouni;
+    uint8_t nobcast;
+    uint8_t vhost_started;
+    struct {
+        int in_use;
+        int first_multi;
+        uint8_t multi_overflow;
+        uint8_t uni_overflow;
+        uint8_t *macs;
+    } mac_table;
+    uint32_t *vlans;
+    DeviceState *qdev;
+    QEMUTimer *rein_timer;
+    uint32_t rein_timer_ticks;
+    uint8_t rein_timer_act;
+    uint32_t rein_ring_idx;
+    rein_event_t rein_ring[REIN_RING_MAX];
+    uint64_t rein_n_dead;
+    uint64_t rein_n_inject;
+    uint64_t rein_n_rerun;
+} VirtIONet;
+
 /*
  * NDEVICES comes from the PCIDevice structure and should be changed if this
  * does ever change.
@@ -624,6 +687,58 @@ qemu_mdb_vravail(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 	return (DCMD_OK);
 }
 
+static const char *reintostr[] = {
+	"INJECT",
+	"DEADMAN",
+	"RUN"
+};
+
+static int
+qemu_mdb_nic_reinject(uintptr_t addr, uint_t flags, int argc,
+    const mdb_arg_t *argv)
+{
+	VirtIONet *n;
+	uint32_t ii, end;
+	rein_event_t *rep;
+
+	if (!(flags & DCMD_ADDRSPEC))
+		return (DCMD_USAGE);
+
+	if (argc > 1)
+		return (DCMD_USAGE);
+
+	n = mdb_alloc(sizeof (VirtIONet), UM_SLEEP | UM_GC);
+
+	if (mdb_vread(n, sizeof (VirtIONet), addr) != sizeof (VirtIONet)) {
+		mdb_warn("failed to read VirtIONet");
+		return (DCMD_ERR);
+	}
+
+	if (n->rein_ring_idx == 0)
+		end = REIN_RING_MAX;
+	else
+		end = n->rein_ring_idx - 1;
+
+	mdb_printf("%-?s %-10s %s\n", "TIMESTAMP", "ACTION", "OTHER");
+	ii = n->rein_ring_idx;
+	for (;;) {
+		rep = n->rein_ring + ii;
+		if (rep->re_time == 0 && rep->re_other == 0)
+			break;
+
+		mdb_printf("%-?p %-10s ", rep->re_time, reintostr[rep->re_act]);
+		if (rep->re_other == 0)
+			mdb_printf("\n", " - ");
+		else
+			mdb_printf("%d\n", rep->re_other);
+		if (ii + 1 == end)
+			break;
+		ii = (ii + 1) % REIN_RING_MAX;
+	}
+
+	return (DCMD_OK);
+}
+
 static const mdb_dcmd_t qemu_dcmds[] = {
 	{ "pcidev2virtio", NULL, "translate a virtio PCI device to its "
 		"virtio equivalent", qemu_mdb_pcidev2virtio },
@@ -633,6 +748,8 @@ static const mdb_dcmd_t qemu_dcmds[] = {
 		qemu_mdb_vrused },
 	{ "qemu_vravail", NULL, "Spit out the avail event of the vring",
 		qemu_mdb_vravail },
+	{ "qemu_nic_reinject", NULL, "Print all of the reinject events",
+		qemu_mdb_nic_reinject },
 	{ NULL }
 };
 

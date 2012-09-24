@@ -17,19 +17,11 @@
 #include "qemu-error.h"
 #include "virtio.h"
 #include "sysemu.h"
+#include "qemu-barrier.h"
 
 /* The alignment to use between consumer and producer parts of vring.
  * x86 pagesize again. */
 #define VIRTIO_PCI_VRING_ALIGN         4096
-
-/* QEMU doesn't strictly need write barriers since everything runs in
- * lock-step.  We'll leave the calls to wmb() in though to make it obvious for
- * KVM or if kqemu gets SMP support.
- * In any case, we must prevent the compiler from reordering the code.
- * TODO: we likely need some rmb()/mb() as well.
- */
-
-#define wmb() __asm__ __volatile__("": : :"memory")
 
 typedef struct VRingDesc
 {
@@ -169,6 +161,13 @@ static inline void vring_used_idx_increment(VirtQueue *vq, uint16_t val)
     stw_phys(pa, vring_used_idx(vq) + val);
 }
 
+static inline uint16_t vring_used_flags(VirtQueue *vq)
+{
+    target_phys_addr_t pa;
+    pa = vq->vring.used + offsetof(VRingUsed, flags);
+    return lduw_phys(pa);
+}
+
 static inline void vring_used_flags_set_bit(VirtQueue *vq, int mask)
 {
     target_phys_addr_t pa;
@@ -235,7 +234,7 @@ void virtqueue_fill(VirtQueue *vq, const VirtQueueElement *elem,
 void virtqueue_flush(VirtQueue *vq, unsigned int count)
 {
     /* Make sure buffer is written before we update index. */
-    wmb();
+    smp_wmb();
     trace_virtqueue_flush(vq, count);
     vring_used_idx_increment(vq, count);
     vq->inuse -= count;
@@ -257,6 +256,11 @@ static int virtqueue_num_heads(VirtQueue *vq, unsigned int idx)
         error_report("Guest moved used index from %u to %u",
                      idx, vring_avail_idx(vq));
         exit(1);
+    }
+    /* On success, callers read a descriptor at vq->last_avail_idx.
+     * Make sure descriptor read does not bypass avail index read. */
+    if (num_heads) {
+        smp_rmb();
     }
 
     return num_heads;
@@ -291,7 +295,7 @@ static unsigned virtqueue_next_desc(target_phys_addr_t desc_pa,
     /* Check they're not leading us off end of descriptors. */
     next = vring_desc_next(desc_pa, i);
     /* Make sure compiler knows to grab that: we don't want it changing! */
-    wmb();
+    smp_wmb();
 
     if (next >= max) {
         error_report("Desc next is %u", next);
@@ -629,17 +633,20 @@ void virtio_irq(VirtQueue *vq)
     virtio_notify_vector(vq->vdev, vq->vector);
 }
 
-void virtio_notify(VirtIODevice *vdev, VirtQueue *vq)
+int virtio_notify(VirtIODevice *vdev, VirtQueue *vq)
 {
+    /* We need to expose used array entries before checking used event. */
+    smp_mb();
     /* Always notify when queue is empty (when feature acknowledge) */
     if ((vring_avail_flags(vq) & VRING_AVAIL_F_NO_INTERRUPT) &&
         (!(vdev->guest_features & (1 << VIRTIO_F_NOTIFY_ON_EMPTY)) ||
          (vq->inuse || vring_avail_idx(vq) != vq->last_avail_idx)))
-        return;
+        return 0;
 
     trace_virtio_notify(vdev, vq);
     vdev->isr |= 0x01;
     virtio_notify_vector(vdev, vq->vector);
+    return 1;
 }
 
 void virtio_notify_config(VirtIODevice *vdev)
@@ -879,4 +886,56 @@ EventNotifier *virtio_queue_get_guest_notifier(VirtQueue *vq)
 EventNotifier *virtio_queue_get_host_notifier(VirtQueue *vq)
 {
     return &vq->host_notifier;
+}
+
+int virtqueue_handled(VirtQueue *vq)
+{
+	smp_mb();
+	return (vq->last_avail_idx == vring_used_idx(vq) ||
+	    vq->last_avail_idx != vring_avail_idx(vq));
+}
+
+/*
+ * We need to go through and check if we have hit the 'stalled' condition.
+ * Due to the way that the virtio driver is implemented in the Linux kernel, it
+ * will potentially kick the guest to process data, disable the queue, but not
+ * enable interrupts before the host is done processing packets. When this
+ * happens all network traffic from the guest ends up getting corked up because
+ * the guest disabled the queue and is waiting for an interrupt from the host to
+ * go and enable it again. In fact, when in this state a little bit of libproc
+ * magic gets us going again rather reliably.
+ * 
+ * Eventually the guest will go through and unmask interrupts saying that it
+ * wants an injection. If we reach a point in time where the last seen available
+ * index is equal to the available index ring and is equal to the used index
+ * ring, then we'll go ahead and install the interupt.
+ */
+int virtqueue_stalled(VirtQueue *vq)
+{
+	smp_mb();
+
+	if (vring_avail_flags(vq) & VRING_AVAIL_F_NO_INTERRUPT)
+		return (0);
+
+	if (vring_used_flags(vq) & VRING_USED_F_NO_NOTIFY)
+		return (0);
+
+	if (vq->inuse)
+		return (0);
+
+	/* We could have also lost the interrupt the other way */
+	if (vq->last_avail_idx != vring_avail_idx(vq))
+		return (2);
+
+	if (vq->last_avail_idx != vring_used_idx(vq))
+		return (0);
+
+	/*
+	 * Interrupts are enabled and we're at a point in time where we would
+	 * have stalled. Let's go ahead and inject the interrupt.
+	 */
+	trace_virtio_notify(vq->vdev, vq);
+	vq->vdev->isr |= 0x01;
+	virtio_notify_vector(vq->vdev, vq->vector);
+	return (1);
 }
