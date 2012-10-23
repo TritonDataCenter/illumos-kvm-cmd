@@ -113,7 +113,7 @@ install: world
 
 clean:
 	gmake clean
-	rm -f qemu.so
+	rm -f qemu.so config-host.mak
 
 xref:
 	find . -type f -name '*.[ch]' > cscope.files
