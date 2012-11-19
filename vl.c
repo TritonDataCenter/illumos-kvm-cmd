@@ -187,6 +187,7 @@ int mem_prealloc = 0; /* force preallocation of physical target memory */
 int nb_nics;
 NICInfo nd_table[MAX_NICS];
 int vm_running;
+int vm_setup = 0;
 int autostart;
 int incoming_expected; /* Started with -incoming and waiting for incoming */
 static int rtc_utc = 1;
@@ -3169,6 +3170,7 @@ int main(int argc, char **argv, char **envp)
     }
 
     qdev_machine_creation_done();
+    vm_setup = 1;
 
     if (rom_load_all() != 0) {
         fprintf(stderr, "rom loading failed\n");

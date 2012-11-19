@@ -2617,8 +2617,8 @@ static void do_info_status_print(Monitor *mon, const QObject *data)
 
 static void do_info_status(Monitor *mon, QObject **ret_data)
 {
-    *ret_data = qobject_from_jsonf("{ 'running': %i, 'singlestep': %i }",
-                                    vm_running, singlestep);
+    *ret_data = qobject_from_jsonf("{ 'running': %i, 'singlestep': %i, 'hwsetup': %i }",
+                                    vm_running, singlestep, vm_setup);
 }
 
 static qemu_acl *find_acl(Monitor *mon, const char *name)
