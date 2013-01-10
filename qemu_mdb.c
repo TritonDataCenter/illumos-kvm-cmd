@@ -132,49 +132,49 @@ typedef struct rein_event {
 
 typedef struct VirtIONet
 {
-    VirtIODevice vdev;
-    uint8_t mac[ETH_ALEN];
-    uint16_t status;
-    VirtQueue *rx_vq;
-    VirtQueue *tx_vq;
-    VirtQueue *ctrl_vq;
-    NICState *nic;
-    QEMUTimer *tx_timer;
-    QEMUBH *tx_bh;
-    uint32_t tx_timeout;
-    int32_t tx_burst;
-    int tx_waiting;
-    uint32_t has_vnet_hdr;
-    uint8_t has_ufo;
-    struct {
-        VirtQueueElement elem;
-        ssize_t len;
-    } async_tx;
-    int mergeable_rx_bufs;
-    uint8_t promisc;
-    uint8_t allmulti;
-    uint8_t alluni;
-    uint8_t nomulti;
-    uint8_t nouni;
-    uint8_t nobcast;
-    uint8_t vhost_started;
-    struct {
-        int in_use;
-        int first_multi;
-        uint8_t multi_overflow;
-        uint8_t uni_overflow;
-        uint8_t *macs;
-    } mac_table;
-    uint32_t *vlans;
-    DeviceState *qdev;
-    QEMUTimer *rein_timer;
-    uint32_t rein_timer_ticks;
-    uint8_t rein_timer_act;
-    uint32_t rein_ring_idx;
-    rein_event_t rein_ring[REIN_RING_MAX];
-    uint64_t rein_n_dead;
-    uint64_t rein_n_inject;
-    uint64_t rein_n_rerun;
+	VirtIODevice vdev;
+	uint8_t mac[ETH_ALEN];
+	uint16_t status;
+	VirtQueue *rx_vq;
+	VirtQueue *tx_vq;
+	VirtQueue *ctrl_vq;
+	NICState *nic;
+	QEMUTimer *tx_timer;
+	QEMUBH *tx_bh;
+	uint32_t tx_timeout;
+	int32_t tx_burst;
+	int tx_waiting;
+	uint32_t has_vnet_hdr;
+	uint8_t has_ufo;
+	struct {
+		VirtQueueElement elem;
+		ssize_t len;
+	} async_tx;
+	int mergeable_rx_bufs;
+	uint8_t promisc;
+	uint8_t allmulti;
+	uint8_t alluni;
+	uint8_t nomulti;
+	uint8_t nouni;
+	uint8_t nobcast;
+	uint8_t vhost_started;
+	struct {
+		int in_use;
+		int first_multi;
+		uint8_t multi_overflow;
+		uint8_t uni_overflow;
+		uint8_t *macs;
+	} mac_table;
+	uint32_t *vlans;
+	DeviceState *qdev;
+	QEMUTimer *rein_timer;
+	uint32_t rein_timer_ticks;
+	uint8_t rein_timer_act;
+	uint32_t rein_ring_idx;
+	rein_event_t rein_ring[REIN_RING_MAX];
+	uint64_t rein_n_dead;
+	uint64_t rein_n_inject;
+	uint64_t rein_n_rerun;
 } VirtIONet;
 
 /*
@@ -739,6 +739,90 @@ qemu_mdb_nic_reinject(uintptr_t addr, uint_t flags, int argc,
 	return (DCMD_OK);
 }
 
+
+static int
+qemu_mdb_ramblock_walk_init(mdb_walk_state_t *wsp)
+{
+	GElf_Sym sym;
+	RAMList rl;
+
+	if (wsp->walk_addr != NULL) {
+		mdb_warn("qemu_ramblock does not support local walks\n");
+		return (WALK_ERR);
+	}
+
+	if (mdb_lookup_by_name("ram_list", &sym) == -1) {
+		mdb_warn("lookup_by_name failed to find ram_list");
+		return (WALK_ERR);
+	}
+
+	if (mdb_vread(&rl, sizeof (rl), sym.st_value) != sizeof (rl)) {
+		mdb_warn("failed to read ram_list");
+		return (WALK_ERR);
+	}
+
+	wsp->walk_addr = (uintptr_t)rl.blocks.lh_first;
+	if (wsp->walk_addr == NULL)
+		return (WALK_DONE);
+
+	return (WALK_NEXT);
+}
+
+static int
+qemu_mdb_ramblock_walk_step(mdb_walk_state_t *wsp)
+{
+	RAMBlock rb;
+	uintptr_t addr = wsp->walk_addr;
+
+	if (addr == NULL)
+		return (WALK_DONE);
+
+	if (mdb_vread(&rb, sizeof (rb), addr) != sizeof (rb)) {
+		mdb_warn("failed to read RAMBlock %p", addr);
+		return (WALK_ERR);
+	}
+
+	wsp->walk_addr = (uintptr_t)rb.next.le_next;
+
+	return (wsp->walk_callback(addr, &rb, wsp->walk_cbdata));
+}
+
+static int
+qemu_mdb_biosptr_cb(uintptr_t addr, const RAMBlock *rb, void *v)
+{
+	uintptr_t *res = v;
+	if (strcmp("pc.bios", rb->idstr) == 0)
+		*res = (uintptr_t)rb->host;
+
+	return (0);
+}
+
+
+static int
+qemu_mdb_biosptr(uintptr_t addr, uint_t flags, int argc,
+    const mdb_arg_t *argv)
+{
+	uintptr_t out = -1;
+
+	if (flags & DCMD_ADDRSPEC)
+		return (DCMD_USAGE);
+
+	if (argc > 1)
+		return (DCMD_USAGE);
+
+	mdb_walk("qemu_ramblock", (mdb_walk_cb_t)qemu_mdb_biosptr_cb,
+	    (void *)&out);
+
+	if (out == -1) {
+		mdb_warn("failed to find pc.bios\n");
+		return (DCMD_ERR);
+	}
+
+	mdb_printf("%x\n", out);
+
+	return (DCMD_OK);
+}
+
 static const mdb_dcmd_t qemu_dcmds[] = {
 	{ "pcidev2virtio", NULL, "translate a virtio PCI device to its "
 		"virtio equivalent", qemu_mdb_pcidev2virtio },
@@ -750,12 +834,17 @@ static const mdb_dcmd_t qemu_dcmds[] = {
 		qemu_mdb_vravail },
 	{ "qemu_nic_reinject", NULL, "Print all of the reinject events",
 		qemu_mdb_nic_reinject },
+	{ "qemu_biosptr", NULL, "Spit out a pointer to the bios memory",
+		qemu_mdb_biosptr },
 	{ NULL }
 };
 
 static const mdb_walker_t qemu_walkers[] = {
 	{ "qemu_host_bus", "walk qemu PCIHostBus structures",
 		qemu_mdb_host_bus_init, qemu_mdb_host_bus_step, NULL },
+	{ "qemu_ramblock", "walk qemu ramblock structures",
+		qemu_mdb_ramblock_walk_init, qemu_mdb_ramblock_walk_step,
+		NULL },
 	{ NULL }
 };
 
