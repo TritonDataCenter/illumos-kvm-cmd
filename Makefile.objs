@@ -311,7 +311,9 @@ libdis-$(CONFIG_SPARC_DIS) += sparc-dis.o
 # trace
 
 ifeq ($(TRACE_BACKEND),dtrace)
+ifeq ($(strip $(CONFIG_SOLARIS)),)
 trace-obj-y = trace-dtrace.o
+endif
 else
 trace-obj-y = trace.o
 ifeq ($(TRACE_BACKEND),simple)

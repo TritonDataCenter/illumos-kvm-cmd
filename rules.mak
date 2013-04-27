@@ -31,7 +31,7 @@ ifeq ($(TRACE_BACKEND),dtrace)
 ifneq ($(strip $(CONFIG_SOLARIS)),)
 %$(EXESUF): %.o
 	$(call quiet-command, dtrace $(CONFIG_DTRACE_FLAGS) -o trace-dtrace.o -s trace-dtrace.dtrace  -G $^,"  LINK  $(TARGET_DIR)$@.dtrace")
-	$(call LINK,$^)
+	$(call LINK,$^ trace-dtrace.o)
 else
 %$(EXESUF): %.o
 	$(call LINK,$^)
