@@ -67,3 +67,4 @@ f smartdc/share/qemu/vgabios-qxl.bin 0444 root bin
 f smartdc/share/qemu/vgabios-stdvga.bin 0444 root bin
 f smartdc/share/qemu/vgabios-vmware.bin 0444 root bin
 f smartdc/share/qemu/vgabios.bin 0444 root bin
+f usr/lib/mdb/proc/amd64/qemu.so 0555 root bin

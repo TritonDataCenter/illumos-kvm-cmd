@@ -26,6 +26,7 @@ MDB_SOURCE =	$(KERNEL_SOURCE)/usr/src/cmd/mdb
 CTFBINDIR=	$(KERNEL_SOURCE)/usr/src/tools/proto/*/opt/onbld/bin/i386
 CSTYLE =	$(KERNEL_SOURCE)/usr/src/tools/scripts/cstyle
 CC =		$(PROTO_AREA)/usr/bin/gcc
+INSTALL =	/usr/sbin/install
 
 QEMU_CPPFLAGS = \
 	-DTARGET_PHYS_ADDR_BITS=64 \
@@ -110,6 +111,7 @@ manifest:
 
 install: world
 	DESTDIR=$(DESTDIR) PATH=$(CTFBINDIR):$(PATH) V=1 gmake install
+	$(INSTALL) -f $(DESTDIR)/usr/lib/mdb/proc/amd64/ qemu.so
 
 clean:
 	gmake clean
