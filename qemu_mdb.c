@@ -27,6 +27,7 @@
 
 #include "hw.h"
 #include "pci.h"
+#include "net.h"
 #include "hw/virtio.h"
 #include "hw/virtio-net.h"
 #include "pci_internals.h"
@@ -427,10 +428,88 @@ qemu_mdb_init_walkers(uintptr_t addr, const PCIDevice *d, void *ignored)
 	return (0);
 }
 
+/*
+ * This is a generic function for different types of nics that exist. Walkers
+ * are created from this as part of mdb initialization.
+ */
+static int
+qemu_mdb_nic_state_walk_init(mdb_walk_state_t *wsp)
+{
+	assert(wsp->walk_arg != NULL);
+
+	if (wsp->walk_addr != NULL) {
+		mdb_warn("local walks are not supported\n");
+		return (WALK_ERR);
+	}
+
+	if (mdb_layered_walk("qemu_vlan_clients", wsp) == -1) {
+		mdb_warn("failed to walk 'qemu_vlan_clients'");
+		return (WALK_ERR);
+	}
+
+	return (WALK_NEXT);
+}
+
+static int
+qemu_mdb_nic_state_walk_step(mdb_walk_state_t *wsp)
+{
+	VLANClientState v;
+	char buf[128];
+
+	assert(wsp->walk_addr != NULL);
+
+	if (mdb_vread(&v, sizeof (v), wsp->walk_addr) != sizeof (v)) {
+		mdb_warn("failed to read VLANClient %p", wsp->walk_addr);
+		return (WALK_ERR);
+	}
+
+	if (mdb_readstr(buf, sizeof (buf), (uintptr_t)v.model) == -1) {
+		mdb_warn("failed to read model string at %p", v.model);
+		return (WALK_ERR);
+	}
+
+	if (strcmp(wsp->walk_arg, buf) != 0)
+		return (WALK_NEXT);
+
+	return (wsp->walk_callback(wsp->walk_addr, &v, wsp->walk_cbdata));
+}
+
+#define	QEMU_N_NIC_TYPES	2
+static char *qemu_nic_types[] = { "e1000", "vnic" };
+
+static int
+qemu_init_nics(void)
+{
+	const char *nic;
+	mdb_walker_t w;
+	char wname[64];
+	char descr[64];
+	int i;
+
+	nic = qemu_nic_types[0];
+	for (i = 0; i < QEMU_N_NIC_TYPES; i++) {
+		nic = qemu_nic_types[i];
+		(void) mdb_snprintf(descr, sizeof (descr),
+		    "walk the qemu %s nic state", nic);
+		(void) mdb_snprintf(wname, sizeof (descr),
+		    "qemu_nics_%s", nic);
+		w.walk_name = wname;
+		w.walk_descr = descr;
+		w.walk_init = qemu_mdb_nic_state_walk_init;
+		w.walk_step = qemu_mdb_nic_state_walk_step;
+		w.walk_fini = NULL;
+		w.walk_init_arg = (void *)nic;
+		if (mdb_add_walker(&w) == -1)
+			return (-1);
+		nic++;
+	}
+
+	return (0);
+}
+
 static int
 qemu_mdb_init(void)
 {
-
 	mdb_walker_t w = { "qemu_pci_device",
 		"walk a PCI Bus's attached devices", qemu_mdb_pci_device_init,
 		qemu_mdb_pci_device_step, NULL };
@@ -440,8 +519,14 @@ qemu_mdb_init(void)
 		return (-1);
 	}
 
+	if (qemu_init_nics() == -1) {
+		mdb_warn("failed to add nic state walkers");
+		return (-1);
+	}
+
 	(void) mdb_walk("qemu_pci_device", (mdb_walk_cb_t)qemu_mdb_init_walkers,
 	    NULL);
+
 	return (0);
 }
 
@@ -823,6 +908,103 @@ qemu_mdb_biosptr(uintptr_t addr, uint_t flags, int argc,
 	return (DCMD_OK);
 }
 
+/*
+ * QEMU uses an anonymous structure for the start of the vlans. Which is really
+ * not as nice as it could be. As such we replicate that here.
+ */
+typedef struct qemu_vlan_header {
+	struct VLANState *tqh_first;
+	struct VLANState **tqh_last;
+} qemu_vlan_header_t;
+
+static int
+qemu_mdb_vlan_walk_init(mdb_walk_state_t *wsp)
+{
+	GElf_Sym sym;
+	qemu_vlan_header_t v;
+
+	if (wsp->walk_addr != NULL) {
+		mdb_warn("qemu_vlan does not support local walks\n");
+		return (WALK_ERR);
+	}
+
+	if (mdb_lookup_by_name("vlans", &sym) == -1) {
+		mdb_warn("lookup_by_name failed to find vlans");
+		return (WALK_ERR);
+	}
+
+	if (mdb_vread(&v, sizeof (v), sym.st_value) != sizeof (v)) {
+		mdb_warn("failed to read vlan header");
+		return (WALK_ERR);
+	}
+
+	wsp->walk_addr = (uintptr_t)v.tqh_first;
+
+	return (WALK_NEXT);
+}
+
+static int
+qemu_mdb_vlan_walk_step(mdb_walk_state_t *wsp)
+{
+	VLANState v;
+	uintptr_t addr = wsp->walk_addr;
+
+	if (addr == NULL)
+		return (WALK_DONE);
+
+	if (mdb_vread(&v, sizeof (v), addr) != sizeof (v)) {
+		mdb_warn("failed to read the VLanState %p", addr);
+		return (WALK_ERR);
+	}
+
+	wsp->walk_addr = (uintptr_t)v.next.tqe_next;
+
+	return (wsp->walk_callback(addr, &v, wsp->walk_cbdata));
+}
+
+static int
+qemu_mdb_vlan_clients_walk_init(mdb_walk_state_t *wsp)
+{
+	if (wsp->walk_addr != NULL) {
+		mdb_warn("qemu_vlan does not support local walks\n");
+		return (WALK_ERR);
+	}
+
+	if (mdb_layered_walk("qemu_vlans", wsp) == -1) {
+		mdb_warn("couldn't walk 'qemu_vlans'");
+		return (WALK_ERR);
+	}
+
+	return (WALK_NEXT);
+}
+
+static int
+qemu_mdb_vlan_clients_walk_step(mdb_walk_state_t *wsp)
+{
+	uintptr_t addr;
+	VLANClientState v;
+	int rval;
+
+	addr = (uintptr_t)((VLANState *)wsp->walk_layer)->clients.tqh_first;
+
+	while (addr != NULL) {
+		if (mdb_vread(&v, sizeof (v), addr) != sizeof (v)) {
+			mdb_warn("couldn't read VLANClient at %p", addr);
+			return (WALK_ERR);
+		}
+
+		rval = wsp->walk_callback(addr, &v, wsp->walk_cbdata);
+
+		if (rval != WALK_NEXT)
+			return (rval);
+
+		addr = (uintptr_t)v.next.tqe_next;
+	}
+
+	return (WALK_NEXT);
+}
+
+
 static const mdb_dcmd_t qemu_dcmds[] = {
 	{ "pcidev2virtio", NULL, "translate a virtio PCI device to its "
 		"virtio equivalent", qemu_mdb_pcidev2virtio },
@@ -845,6 +1027,11 @@ static const mdb_walker_t qemu_walkers[] = {
 	{ "qemu_ramblock", "walk qemu ramblock structures",
 		qemu_mdb_ramblock_walk_init, qemu_mdb_ramblock_walk_step,
 		NULL },
+	{ "qemu_vlans", "walk qemu vlan structures",
+		qemu_mdb_vlan_walk_init, qemu_mdb_vlan_walk_step, NULL },
+	{ "qemu_vlan_clients", "walk qemu vlan client structures",
+		qemu_mdb_vlan_clients_walk_init,
+		qemu_mdb_vlan_clients_walk_step, NULL },
 	{ NULL }
 };
 
