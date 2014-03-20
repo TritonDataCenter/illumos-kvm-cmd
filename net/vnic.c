@@ -1,8 +1,8 @@
 /*
  * QEMU System Emulator
- * Solaris VNIC support
+ * illumos VNIC/vnd support
  *
- * Copyright (c) 2011 Joyent, Inc.
+ * Copyright (c) 2013 Joyent, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,12 +31,15 @@
 #include <stropts.h>
 #include <unistd.h>
 
+#include <assert.h>
 #include <net/if_dl.h>
 #include <sys/ethernet.h>
-#include <sys/dlpi.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <libvnd.h>
+#include <sys/vnd.h>
+#include <sys/frameio.h>
 
 #include "net/vnic.h"
 #include "net/vnic-dhcp.h"
@@ -59,8 +62,10 @@ typedef struct VNICState {
 	unsigned int	vns_wpoll;
 	uint8_t		vns_buf[VNIC_BUFFSIZE];
 	uint_t		vns_sap;
-	dlpi_handle_t	vns_hdl;
+	vnd_handle_t	*vns_hdl;
 	VNICDHCPState	vns_ds;
+	frameio_t	*vns_rfio;
+	frameio_t	*vns_wfio;
 } VNICState;
 
 static void vnic_update_fd_handler(VNICState *);
@@ -87,44 +92,37 @@ vnic_poll(VLANClientState *ncp, bool enable)
 	vnic_write_poll(vsp, 1);
 }
 
+/*
+ * Because this is a single packet API, just read(2). If QEMU's net backend were
+ * better we could send more packets at once.
+ */
 static int
 vnic_read_packet(VNICState *vsp, uint8_t *buf, int len)
 {
-	struct strbuf sbuf;
-	int flags, ret;
-
-	flags = 0;
-	sbuf.maxlen = len;
-	sbuf.buf = (char *)buf;
+	int ret;
 
 	do {
-		ret = getmsg(vsp->vns_fd, NULL, &sbuf, &flags);
+		ret = read(vsp->vns_fd, buf, len);
 	} while (ret == -1 && errno == EINTR);
 
 	if (ret == -1 && errno == EAGAIN) {
-		vnic_write_poll(vsp, 1);
+		vnic_read_poll(vsp, 1);
 		return (0);
 	}
 
-	if (ret == -1) {
-		return (-1);
-	}
-
-	return (sbuf.len);
+	return (ret);
 }
 
+/*
+ * For a single packet, just use write(2).
+ */
 static int
 vnic_write_packet(VNICState *vsp, const uint8_t *buf, int len)
 {
-	struct strbuf sbuf;
-	int flags, ret;
-
-	flags = 0;
-	sbuf.len = len;
-	sbuf.buf = (char *)buf;
+	int ret;
 
 	do {
-		ret = putmsg(vsp->vns_fd, NULL, &sbuf, flags);
+		ret = write(vsp->vns_fd, buf, len);
 	} while (ret == -1 && errno == EINTR);
 
 	if (ret == -1 && errno == EAGAIN) {
@@ -132,10 +130,7 @@ vnic_write_packet(VNICState *vsp, const uint8_t *buf, int len)
 		return (0);
 	}
 
-	if (ret == -1)
-		return (-1);
-
-	return (len);
+	return (ret);
 }
 
 static int
@@ -188,14 +183,9 @@ vnic_receive(VLANClientState *ncp, const uint8_t *buf, size_t size)
 {
 	VNICState *vsp = DO_UPCAST(VNICState, vns_nc, ncp);
 
-#if VNIC_DHCP_DEBUG
-	debug_eth_frame(buf, size);
-#endif
-
 	if (vsp->vns_ds.vnds_enabled && is_dhcp_request(buf, size)) {
 		int ret;
 
-		// XXX: do we need to handle arp requests for the fake IP?
 		ret = create_dhcp_response(buf, size, &vsp->vns_ds);
 		if (!ret)
 			return size;
@@ -211,6 +201,76 @@ vnic_receive(VLANClientState *ncp, const uint8_t *buf, size_t size)
 	return (vnic_write_packet(vsp, buf, size));
 }
 
+static ssize_t
+vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
+    int iovcnt)
+{
+	int ret, fvec, i;
+	size_t total;
+	VNICState *vsp = DO_UPCAST(VNICState, vns_nc, ncp);
+
+	assert(iovcnt <= FRAMEIO_NVECS_MAX);
+	/*
+	 * Copy the iovcs to our write frameio. Also, check if any of these is
+	 * valid dhcp and handle it immediately.
+	 */
+	for (i = 0, fvec = 0; i < iovcnt; i++, iov++) {
+
+		if (vsp->vns_ds.vnds_enabled &&
+		    is_dhcp_request(iov->iov_base, iov->iov_len)) {
+			/*
+			 * Basically drop the packet because we can't send a
+			 * reply at this time. It's unfortunate, but we don't
+			 * really have the proper infrastructure to do something
+			 * else with this at this time.
+			 */
+			if (!vnic_can_send(vsp))
+				continue;
+			ret = create_dhcp_response(iov->iov_base,
+			    iov->iov_len, &vsp->vns_ds);
+			/* This failed, drop it and continue */
+			if (ret == 0)
+				continue;
+
+			ret = qemu_send_packet_async(&vsp->vns_nc,
+			    vsp->vns_ds.vnds_buf, ret, vnic_send_completed);
+			/*
+			 * qemu has told us that it can't receive any more data
+			 * at this time for the guest (host->guest traffic) so
+			 * turn off our read poll until we get that the send has
+			 * completed.
+			 */
+			if (ret == 0)
+				vnic_read_poll(vsp, 0);
+			continue;
+		}
+		vsp->vns_wfio->fio_vecs[fvec].fv_buf = iov->iov_base;
+		vsp->vns_wfio->fio_vecs[fvec].fv_buflen = iov->iov_len;
+		fvec++;
+	}
+
+	vsp->vns_wfio->fio_nvecs = fvec;
+	do {
+		ret = vnd_frameio_write(vsp->vns_hdl, vsp->vns_wfio);
+	} while (ret == -1 && errno == EINTR);
+
+	if (ret == -1 && errno == EAGAIN) {
+		vnic_write_poll(vsp, 1);
+		return (0);
+	}
+
+	total = 0;
+	for (i = 0; i < vsp->vns_wfio->fio_nvecs; i++) {
+		if (vsp->vns_wfio->fio_vecs[i].fv_actlen == 0 &&
+		    vsp->vns_wfio->fio_vecs[i].fv_buflen == 0)
+			break;
+
+		total += vsp->vns_wfio->fio_vecs[i].fv_actlen;
+	}
+
+	return (total);
+}
+
 static void
 vnic_cleanup(VLANClientState *ncp)
 {
@@ -220,7 +280,7 @@ vnic_cleanup(VLANClientState *ncp)
 
 	qemu_purge_queued_packets(ncp);
 
-	dlpi_close(vsp->vns_hdl);
+	vnd_close(vsp->vns_hdl);
 }
 
 static void
@@ -237,42 +297,41 @@ static NetClientInfo net_vnic_info = {
 	.type = NET_CLIENT_TYPE_VNIC,
 	.size = sizeof (VNICState),
 	.receive = vnic_receive,
+	.receive_iov = vnic_receive_iov,
 	.poll = vnic_poll,
 	.cleanup = vnic_cleanup
 };
 
-#ifdef CONFIG_SUNOS_VNIC_KVM
+/*
+ * Set up all the known values for our frame I/O devices.
+ */
 static int
-net_init_kvm(int vfd)
+vnic_frameio_init(VNICState *vsp)
 {
-	int kfd;
-
-	if ((kfd = open("/dev/kvm", O_RDWR)) < 0) {
-		error_report("can't open /dev/kvm for vnic: %s\n",
-		    strerror(errno));
-		return (-1);
-	}
-
-	/* XXX We shouldn't be embedding the KVM_NET_QUEUE fd */
-	if (ioctl(kfd, 0x2000ae21, vfd) < 0) {
-		error_report("can't ioctl: %s\n", strerror(errno));
-		return (-1);
-	}
-
-	(void) close(kfd);
-
+	vsp->vns_rfio = qemu_mallocz(sizeof (frameio_t) +
+	    sizeof (framevec_t) * FRAMEIO_NVECS_MAX);
+	if (vsp->vns_rfio == NULL)
+		return (1);
+	vsp->vns_wfio = qemu_mallocz(sizeof (frameio_t) +
+	    sizeof (framevec_t) * FRAMEIO_NVECS_MAX);
+	if (vsp->vns_wfio == NULL)
+		return (1);
+	vsp->vns_rfio->fio_version = FRAMEIO_CURRENT_VERSION;
+	vsp->vns_rfio->fio_nvpf = 1;
+	vsp->vns_wfio->fio_version = FRAMEIO_CURRENT_VERSION;
+	vsp->vns_wfio->fio_nvpf = 1;
 	return (0);
 }
-#endif
 
 int
 net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 {
-	int fd, len;
+	int fd, len, vnderr, syserr;
 	const char *ifname, *mac;
 	uchar_t *macaddr;
 	VLANClientState *ncp;
 	VNICState *vsp;
+	vnd_prop_buf_t vib;
 
 	if ((ifname = qemu_opt_get(opts, "ifname")) == NULL) {
 		error_report("missing ifname required for vnic\n");
@@ -292,48 +351,36 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 	ncp = qemu_new_net_client(&net_vnic_info, vlan, NULL, "vnic", name);
 	vsp = DO_UPCAST(VNICState, vns_nc, ncp);
 
-	if (dlpi_open(ifname, &vsp->vns_hdl, DLPI_RAW) != DLPI_SUCCESS) {
-		error_report("vnic: failed to open interface %s", ifname);
+
+	vsp->vns_hdl = vnd_open(NULL, ifname, &vnderr, &syserr);
+	if (vsp->vns_hdl == NULL) {
+		const char *err = vnderr != VND_E_SYS ?
+		    vnd_strerror(vnderr) : vnd_strsyserror(syserr);
+		error_report("vnic: failed to open interface %s - %s\n",
+		    ifname, err);
 		return (-1);
 	}
 
-	if (dlpi_bind(vsp->vns_hdl, DLPI_ANY_SAP, &vsp->vns_sap) != DLPI_SUCCESS) {
-		error_report("vnic: failed to bind interface %s", ifname);
+	vib.vpb_size = 1024 * 1024 * 4; 	/* 4 MB */
+	if (vnd_prop_set(vsp->vns_hdl, VND_PROP_RXBUF, &vib,
+	    sizeof (vib)) != 0) {
+		const char *err = vnderr != VND_E_SYS ?
+		    vnd_strerror(vnderr) : vnd_strsyserror(syserr);
+		error_report("failed to change rx buf size: %s\n", err);
 		return (-1);
 	}
 
-	/*
-	 * We only set the mac address of the vnic if the user passed in the
-	 * option on the command line.
-	 */
-	if (mac != NULL) {
-		if (dlpi_set_physaddr(vsp->vns_hdl, DL_CURR_PHYS_ADDR, macaddr,
-		    ETHERADDRL) != DLPI_SUCCESS) {
-			error_report("vnic: failed to set mac address\n");
-			return (-1);
-		}
-	}
-
-	/*
-	 * We are enabling support for two different kinds of promiscuous modes.
-	 * The first is getting us the basics of the unicast traffic that we
-	 * care about. The latter is going to ensure that we also get other
-	 * types of physical traffic such as multicast and broadcast.
-	 */
-	if (dlpi_promiscon(vsp->vns_hdl, DL_PROMISC_SAP) != DLPI_SUCCESS) {
-		error_report("vnic: failed to be promiscous with interface %s",
-		    ifname);
+	vib.vpb_size = 1024 * 1024 * 4; 	/* 4 MB */
+	if (vnd_prop_set(vsp->vns_hdl, VND_PROP_TXBUF, &vib,
+	    sizeof (vib)) != 0) {
+		const char *err = vnderr != VND_E_SYS ?
+		    vnd_strerror(vnderr) : vnd_strsyserror(syserr);
+		error_report("failed to change tx buf size: %s\n", err);
 		return (-1);
 	}
 
-	if (dlpi_promiscon(vsp->vns_hdl, DL_PROMISC_PHYS) != DLPI_SUCCESS) {
-		error_report("vnic: failed to be promiscous with interface %s",
-		    ifname);
-		return (-1);
-	}
 
-	fd = dlpi_fd(vsp->vns_hdl);
-
+	fd = vnd_pollfd(vsp->vns_hdl);
 	if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
 		error_report("vnic: failed to set fd on interface %s to "
 		    "non-blocking: %s\n", ifname, strerror(errno));
@@ -348,9 +395,11 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 	if (vnic_dhcp_init(&vsp->vns_ds, opts) == 0)
 		return (-1);
 
-#ifdef CONFIG_SUNOS_VNIC_KVM
-	net_init_kvm(fd);
-#endif
+	if (vnic_frameio_init(vsp) != 0) {
+		error_report("vnic: failed initialize frameio: %s\n",
+		    strerror(errno));
+		return (-1);
+	}
 
 	/* We have to manually intialize the polling for read */
 	vnic_read_poll(vsp, 1);

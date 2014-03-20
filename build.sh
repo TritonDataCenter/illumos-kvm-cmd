@@ -39,7 +39,7 @@ CC="${CC:-${DESTDIR}/usr/bin/gcc}"
 XCFLAGS="-fno-builtin -I${PNGINC} -isystem ${DESTDIR}/usr/include -msave-args"
 XLDFLAGS="-nodefaultlibs -L${PNGLIB} -L${DESTDIR}/usr/lib -L${DESTDIR}/lib"
 XLDFLAGS="${XLDFLAGS} -Wl,-zfatal-warnings -Wl,-zassert-deflib"
-XLDFLAGS="${XLDFLAGS} -lz -lm -lc"
+XLDFLAGS="${XLDFLAGS} -lz -lm -lc -lvnd"
 ./configure \
     --cc=$CC \
     --extra-cflags="${XCFLAGS}" \
