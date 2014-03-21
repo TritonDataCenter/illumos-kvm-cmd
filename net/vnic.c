@@ -209,47 +209,51 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
 	size_t total;
 	VNICState *vsp = DO_UPCAST(VNICState, vns_nc, ncp);
 
+	for (total = 0, i = 0; i < iovcnt; i++) {
+		total += (iov + i)->iov_len;
+	}
+
 	assert(iovcnt <= FRAMEIO_NVECS_MAX);
+	if (vsp->vns_ds.vnds_enabled &&
+	    is_dhcp_requestv(iov, iovcnt)) {
+		/*
+		 * Basically drop the packet because we can't send a
+		 * reply at this time. It's unfortunate, but we don't
+		 * really have the proper infrastructure to do something
+		 * else with this at this time.
+		 */
+		if (!vnic_can_send(vsp))
+			return (total);
+		ret = create_dhcp_responsev(iov, iovcnt, &vsp->vns_ds);
+		/* This failed, drop it and continue */
+		if (ret == 0)
+			return (total);
+
+		ret = qemu_send_packet_async(&vsp->vns_nc,
+		    vsp->vns_ds.vnds_buf, ret, vnic_send_completed);
+		/*
+		 * qemu has told us that it can't receive any more data
+		 * at this time for the guest (host->guest traffic) so
+		 * turn off our read poll until we get that the send has
+		 * completed.
+		 */
+		if (ret == 0)
+			vnic_read_poll(vsp, 0);
+		return (total);
+	}
+
 	/*
-	 * Copy the iovcs to our write frameio. Also, check if any of these is
-	 * valid dhcp and handle it immediately.
+	 * Copy the iovcs to our write frameio.
 	 */
 	for (i = 0, fvec = 0; i < iovcnt; i++, iov++) {
 
-		if (vsp->vns_ds.vnds_enabled &&
-		    is_dhcp_request(iov->iov_base, iov->iov_len)) {
-			/*
-			 * Basically drop the packet because we can't send a
-			 * reply at this time. It's unfortunate, but we don't
-			 * really have the proper infrastructure to do something
-			 * else with this at this time.
-			 */
-			if (!vnic_can_send(vsp))
-				continue;
-			ret = create_dhcp_response(iov->iov_base,
-			    iov->iov_len, &vsp->vns_ds);
-			/* This failed, drop it and continue */
-			if (ret == 0)
-				continue;
-
-			ret = qemu_send_packet_async(&vsp->vns_nc,
-			    vsp->vns_ds.vnds_buf, ret, vnic_send_completed);
-			/*
-			 * qemu has told us that it can't receive any more data
-			 * at this time for the guest (host->guest traffic) so
-			 * turn off our read poll until we get that the send has
-			 * completed.
-			 */
-			if (ret == 0)
-				vnic_read_poll(vsp, 0);
-			continue;
-		}
 		vsp->vns_wfio->fio_vecs[fvec].fv_buf = iov->iov_base;
 		vsp->vns_wfio->fio_vecs[fvec].fv_buflen = iov->iov_len;
 		fvec++;
 	}
 
 	vsp->vns_wfio->fio_nvecs = fvec;
+	vsp->vns_wfio->fio_nvpf = fvec;
 	do {
 		ret = vnd_frameio_write(vsp->vns_hdl, vsp->vns_wfio);
 	} while (ret == -1 && errno == EINTR);

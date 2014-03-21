@@ -568,6 +568,25 @@ dhcp_reply(const struct bootp_t *bp, const unsigned char *src_mac,
 	return (sizeof(struct bootp_t) + sizeof(struct ethhdr));
 }
 
+/*
+ * Since this is not the common path, just combine the IOV for the moment, it's
+ * not great.
+ */
+int
+create_dhcp_responsev(const struct iovec *iov, int iovcnt, VNICDHCPState *vdsp)
+{
+	int i;
+	size_t off;
+	uint8_t buf[65536];
+
+	for (i = 0, off = 0; i < iovcnt; i++, iov++) {
+		bcopy(iov->iov_base, buf + off, iov->iov_len);
+		off += iov->iov_len;
+	}
+
+	return (create_dhcp_response(buf, off, vdsp));
+}
+
 int
 create_dhcp_response(const uint8_t *buf_p, int pkt_len, VNICDHCPState *vdsp)
 {
@@ -630,6 +649,42 @@ is_dhcp_request(const uint8_t *buf_p, size_t size)
 
 	DPRINTF("UDP packet, but not a DHCP request\n");
 	return (0);
+}
+
+int
+is_dhcp_requestv(const struct iovec *iov, int iovcnt)
+{
+	uint8_t buf[1024];
+	size_t tlen = ETH_HLEN + sizeof (struct ip) + sizeof (struct udphdr);
+	size_t clen, coff, tc, toff;
+
+	if (iov->iov_len >= (ETH_HLEN + sizeof (struct ip) +
+	    sizeof (struct udphdr))) {
+		return (is_dhcp_request(iov->iov_base, iov->iov_len));
+	}
+
+	clen = iov->iov_len;
+	coff = 0;
+	toff = 0;
+	while (tlen > 0) {
+		tc = MIN(tlen, clen);
+		if (clen == 0) {
+			if (iovcnt == 1)
+				return (0);
+			iov++;
+			clen = iov->iov_len;
+			coff = 0;
+		}
+		bcopy(iov->iov_base + coff, buf + toff, tc);
+		tlen -= tc;
+		clen -= tc;
+		coff += tc;
+		toff += tc;
+	}
+
+	return (is_dhcp_request(buf, ETH_HLEN + sizeof (struct ip) +
+	    sizeof (struct udphdr)));
+
 }
 
 static int

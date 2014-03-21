@@ -48,9 +48,11 @@ typedef struct VNICDHCPState {
 	unsigned int	vnds_num_dns_addrs;
 } VNICDHCPState;
 
-int create_dhcp_response(const uint8_t *buf_p, int pkt_len, VNICDHCPState *vdsp);
-int is_dhcp_request(const uint8_t *buf_p, size_t size);
-int vnic_dhcp_init(VNICDHCPState *vdsp, QemuOpts *opts);
-void debug_eth_frame(const uint8_t *buf_p, size_t size);
+extern int create_dhcp_response(const uint8_t *, int, VNICDHCPState *);
+extern int create_dhcp_responsev(const struct iovec *, int, VNICDHCPState *);
+extern int is_dhcp_request(const uint8_t *, size_t);
+extern int is_dhcp_requestv(const struct iovec *, int);
+extern int vnic_dhcp_init(VNICDHCPState *, QemuOpts *);
+extern void debug_eth_frame(const uint8_t *, size_t);
 
 #endif /* QEMU_NET_VNIC_DHCP_H */
