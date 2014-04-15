@@ -2,7 +2,7 @@
  * QEMU System Emulator
  * illumos VNIC/vnd support
  *
- * Copyright (c) 2013 Joyent, Inc.
+ * Copyright (c) 2014 Joyent, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stropts.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #include <assert.h>
@@ -188,14 +189,14 @@ vnic_receive(VLANClientState *ncp, const uint8_t *buf, size_t size)
 
 		ret = create_dhcp_response(buf, size, &vsp->vns_ds);
 		if (!ret)
-			return size;
+			return (size);
 
 		ret = qemu_send_packet_async(&vsp->vns_nc,
 		    vsp->vns_ds.vnds_buf, ret, vnic_send_completed);
 		if (ret == 0)
 			vnic_read_poll(vsp, 0);
 
-		return size;
+		return (size);
 	}
 
 	return (vnic_write_packet(vsp, buf, size));
@@ -205,7 +206,7 @@ static ssize_t
 vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
     int iovcnt)
 {
-	int ret, fvec, i;
+	int ret, i;
 	size_t total;
 	VNICState *vsp = DO_UPCAST(VNICState, vns_nc, ncp);
 
@@ -245,15 +246,13 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
 	/*
 	 * Copy the iovcs to our write frameio.
 	 */
-	for (i = 0, fvec = 0; i < iovcnt; i++, iov++) {
-
-		vsp->vns_wfio->fio_vecs[fvec].fv_buf = iov->iov_base;
-		vsp->vns_wfio->fio_vecs[fvec].fv_buflen = iov->iov_len;
-		fvec++;
+	for (i = 0; i < iovcnt; i++, iov++) {
+		vsp->vns_wfio->fio_vecs[i].fv_buf = iov->iov_base;
+		vsp->vns_wfio->fio_vecs[i].fv_buflen = iov->iov_len;
 	}
 
-	vsp->vns_wfio->fio_nvecs = fvec;
-	vsp->vns_wfio->fio_nvpf = fvec;
+	vsp->vns_wfio->fio_nvecs = iovcnt;
+	vsp->vns_wfio->fio_nvpf = iovcnt;
 	do {
 		ret = vnd_frameio_write(vsp->vns_hdl, vsp->vns_wfio);
 	} while (ret == -1 && errno == EINTR);
@@ -261,6 +260,8 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
 	if (ret == -1 && errno == EAGAIN) {
 		vnic_write_poll(vsp, 1);
 		return (0);
+	} else if (ret == -1) {
+		abort();
 	}
 
 	total = 0;
@@ -393,8 +394,8 @@ net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 
 	vsp->vns_fd = fd;
 
-	snprintf(vsp->vns_nc.info_str, sizeof (vsp->vns_nc.info_str), "ifname=%s",
-	    qemu_opt_get(opts, "ifname"));
+	snprintf(vsp->vns_nc.info_str, sizeof (vsp->vns_nc.info_str),
+	    "ifname=%s", qemu_opt_get(opts, "ifname"));
 
 	if (vnic_dhcp_init(&vsp->vns_ds, opts) == 0)
 		return (-1);
