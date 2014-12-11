@@ -2241,6 +2241,11 @@ EOF
 if compile_prog "" "" ; then
   eventfd=yes
 fi
+#
+# We can't control eventfd via a ./configure option. But we need to
+# disable it. Nothing says permanent like a hacky fix.
+#
+eventfd=no
 
 # check for fallocate
 fallocate=no
