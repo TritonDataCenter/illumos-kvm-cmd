@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2012 Joyent, Inc.
+# Copyright 2015 Joyent, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -109,6 +109,8 @@ update:
 manifest:
 	cp manifest $(DESTDIR)/$(DESTNAME)
 
+mancheck_conf:
+
 install: world
 	DESTDIR=$(DESTDIR) PATH=$(CTFBINDIR):$(PATH) V=1 gmake install
 	$(INSTALL) -f $(DESTDIR)/usr/lib/mdb/proc/amd64/ qemu.so
@@ -124,4 +126,4 @@ xref:
 check:
 	$(CSTYLE) qemu_mdb.c
 
-.PHONY: manifest xref check clean
+.PHONY: manifest mancheck_conf xref check clean
