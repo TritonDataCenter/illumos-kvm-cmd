@@ -2,7 +2,7 @@
  * QEMU System Emulator
  * illumos VNIC/vnd support
  *
- * Copyright (c) 2014 Joyent, Inc.
+ * Copyright (c) 2015 Joyent, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -254,7 +254,7 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
 	}
 
 	altsize = 0;
-	for (i = MIN(iovcnt, FRAMEIO_NVECS_MAX); i != iovcnt; i++, iov++) {
+	for (i = MIN(iovcnt, FRAMEIO_NVECS_MAX - 1); i != iovcnt; i++, iov++) {
 		/*
 		 * The packet is too large. We're goin to silently drop it...
 		 */
