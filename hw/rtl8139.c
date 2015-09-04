@@ -2100,6 +2100,11 @@ static int rtl8139_cplus_transmit_one(RTL8139State *s)
             #define ETH_HLEN    14
             #define ETH_MTU     1500
 
+            /* Large enough for Ethernet and IP headers? */
+            if (saved_size < ETH_HLEN + sizeof(ip_header)) {
+                goto skip_offload;
+            }
+
             /* ip packet header */
             ip_header *ip = NULL;
             int hlen = 0;
