@@ -13,17 +13,34 @@
   The included image for PowerPC (for 32 and 64 bit PPC CPUs), Sparc32
   and Sparc64 are built from OpenBIOS SVN revision 1018.
 
-- The PXE roms come from Rom-o-Matic gPXE 0.9.9 with BANNER_TIMEOUT=0
+- These PXE roms come from Rom-o-Matic gPXE 0.9.9 with BANNER_TIMEOUT=0
 
   e1000 8086:100E
   eepro100 8086:1209 (also used for 8086:1229 and 8086:2449)
   ns8390 1050:0940
   pcnet32 1022:2000
   rtl8139 10ec:8139
-  virtio 1af4:1000
 
   http://rom-o-matic.net/
 
 - The S390 zipl loader is an addition to the official IBM s390-tools
   package. That fork is maintained in its own git repository at:
   git://repo.or.cz/s390-tools.git
+
+- These PXE ROMs come from the Joyent fork of iPXE[1]:
+
+    virtio 1af4:1000
+
+  The ROMs are built via sdcboot.git[2] with a few customisations:
+
+  - BANNER_TIMEOUT is set to 0, for the quickest possible boot time
+  - PRODUCT_NAME is set to "SmartOS HVM"
+  - COMCONSOLE is set to COM1, as COM2 is for metadata in SmartOS
+
+  Once the customisations are applied, each ROM is built like so,
+  substituting for the appropriate vendor/product ID:
+
+    gmake -j32 ipxe/src/bin/1af41000.rom
+
+  [1]: https://github.com/joyent/ipxe
+  [2]: https://github.com/joyent/sdcboot
