@@ -1816,18 +1816,22 @@ static void set_pixel_format(VncState *vs,
     }
 
     vs->clientds = *(vs->vd->guest.ds);
-    vs->clientds.pf.rmax = red_max;
+
+    vs->clientds.pf.rmax = red_max != 0 ? red_max : 0xff;
     count_bits(vs->clientds.pf.rbits, red_max);
     vs->clientds.pf.rshift = red_shift;
     vs->clientds.pf.rmask = red_max << red_shift;
-    vs->clientds.pf.gmax = green_max;
+
+    vs->clientds.pf.gmax = green_max != 0 ? green_max : 0xff;
     count_bits(vs->clientds.pf.gbits, green_max);
     vs->clientds.pf.gshift = green_shift;
     vs->clientds.pf.gmask = green_max << green_shift;
-    vs->clientds.pf.bmax = blue_max;
+
+    vs->clientds.pf.bmax = blue_max != 0 ? blue_max : 0xff;
     count_bits(vs->clientds.pf.bbits, blue_max);
     vs->clientds.pf.bshift = blue_shift;
     vs->clientds.pf.bmask = blue_max << blue_shift;
+
     vs->clientds.pf.bits_per_pixel = bits_per_pixel;
     vs->clientds.pf.bytes_per_pixel = bits_per_pixel / 8;
     vs->clientds.pf.depth = bits_per_pixel == 32 ? 24 : bits_per_pixel;
