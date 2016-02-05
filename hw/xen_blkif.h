@@ -79,8 +79,14 @@ static inline void blkif_get_x86_32_req(blkif_request_t *dst, blkif_x86_32_reque
 	dst->handle = src->handle;
 	dst->id = src->id;
 	dst->sector_number = src->sector_number;
-	if (n > src->nr_segments)
-		n = src->nr_segments;
+
+	/*
+	 * Ensure we use a consistent view of "nr_segments", which is shared
+	 * with the guest:
+	 */
+	barrier();
+	if (n > dst->nr_segments)
+		n = dst->nr_segments;
 	for (i = 0; i < n; i++)
 		dst->seg[i] = src->seg[i];
 }
@@ -94,8 +100,14 @@ static inline void blkif_get_x86_64_req(blkif_request_t *dst, blkif_x86_64_reque
 	dst->handle = src->handle;
 	dst->id = src->id;
 	dst->sector_number = src->sector_number;
-	if (n > src->nr_segments)
-		n = src->nr_segments;
+
+	/*
+	 * Ensure we use a consistent view of "nr_segments", which is shared
+	 * with the guest:
+	 */
+	barrier();
+	if (n > dst->nr_segments)
+		n = dst->nr_segments;
 	for (i = 0; i < n; i++)
 		dst->seg[i] = src->seg[i];
 }
