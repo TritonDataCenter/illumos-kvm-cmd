@@ -59,10 +59,15 @@ struct FWCfgState {
 static void fw_cfg_write(FWCfgState *s, uint8_t value)
 {
     int arch = !!(s->cur_entry & FW_CFG_ARCH_LOCAL);
-    FWCfgEntry *e = &s->entries[arch][s->cur_entry & FW_CFG_ENTRY_MASK];
+    FWCfgEntry *e;
 
     FW_CFG_DPRINTF("write %d\n", value);
 
+    if (s->cur_entry == FW_CFG_INVALID) {
+        return;
+    }
+
+    e = &s->entries[arch][s->cur_entry & FW_CFG_ENTRY_MASK];
     if (s->cur_entry & FW_CFG_WRITE_CHANNEL && s->cur_offset < e->len) {
         e->data[s->cur_offset++] = value;
         if (s->cur_offset == e->len) {
@@ -93,16 +98,22 @@ static int fw_cfg_select(FWCfgState *s, uint16_t key)
 static uint8_t fw_cfg_read(FWCfgState *s)
 {
     int arch = !!(s->cur_entry & FW_CFG_ARCH_LOCAL);
-    FWCfgEntry *e = &s->entries[arch][s->cur_entry & FW_CFG_ENTRY_MASK];
+    FWCfgEntry *e;
     uint8_t ret;
 
-    if (s->cur_entry == FW_CFG_INVALID || !e->data || s->cur_offset >= e->len)
+    if (s->cur_entry == FW_CFG_INVALID) {
+        ret = 0;
+        goto out;
+    }
+
+    e = &s->entries[arch][s->cur_entry & FW_CFG_ENTRY_MASK];
+    if (!e->data || s->cur_offset >= e->len)
         ret = 0;
     else
         ret = e->data[s->cur_offset++];
 
+out:
     FW_CFG_DPRINTF("read %d\n", ret);
-
     return ret;
 }
 
