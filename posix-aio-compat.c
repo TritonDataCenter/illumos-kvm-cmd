@@ -70,17 +70,8 @@ static int cur_threads = 0;
 static int idle_threads = 0;
 static QTAILQ_HEAD(, qemu_paiocb) request_list;
 
-/*
- * QEMU is a bit reckless in its behavior. It doesn't bother consulting IOV_MAX
- * and just sends in its I/O vector requests regardless. As such, until such
- * time as illumos increases its IOV_MAX to better accommodate this kind of
- * behavior, or QEMU becomes smarter about it (unlikely given that it's just
- * parroting the virtio requests), we're going to have to disable preadv/pwritev
- * support. This is unfortunate, as it gets us out of a memory allocation that
- * can sometimes fail.
- */
 #ifdef CONFIG_PREADV
-static int preadv_present = 0;
+static int preadv_present = 1;
 #else
 static int preadv_present = 0;
 #endif
