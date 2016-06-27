@@ -2,7 +2,7 @@
  * QEMU System Emulator
  * illumos VNIC/vnd support
  *
- * Copyright (c) 2015 Joyent, Inc.
+ * Copyright 2016 Joyent, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <netpacket/packet.h>
 #include <assert.h>
 #include <net/if_dl.h>
 #include <sys/ethernet.h>
@@ -183,23 +184,39 @@ vnic_writable(void *opaque)
 static ssize_t
 vnic_receive(VLANClientState *ncp, const uint8_t *buf, size_t size)
 {
+	uint16_t ethtype;
 	VNICState *vsp = DO_UPCAST(VNICState, vns_nc, ncp);
 
-	if (vsp->vns_ds.vnds_enabled && is_dhcp_request(buf, size)) {
+	if (vsp->vns_ds.vnds_enabled && get_ethertype(buf, size, &ethtype)) {
+		VNICDHCPState *vdsp = &vsp->vns_ds;
 		int ret;
+		switch (ethtype) {
+		case ETH_P_ARP:
+			if (!is_arp_request(buf, size, vdsp))
+				goto send;
+			ret = create_arp_response(buf, size, vdsp);
+			break;
+		case ETH_P_IP:
+			if (!is_dhcp_request(buf, size))
+				goto send;
+			ret = create_dhcp_response(buf, size, vdsp);
+			break;
+		default:
+			goto send;
+		}
 
-		ret = create_dhcp_response(buf, size, &vsp->vns_ds);
 		if (!ret)
 			return (size);
 
 		ret = qemu_send_packet_async(&vsp->vns_nc,
-		    vsp->vns_ds.vnds_buf, ret, vnic_send_completed);
+		    vdsp->vnds_buf, ret, vnic_send_completed);
 		if (ret == 0)
 			vnic_read_poll(vsp, 0);
 
 		return (size);
 	}
 
+send:
 	return (vnic_write_packet(vsp, buf, size));
 }
 
@@ -208,6 +225,7 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
     int iovcnt)
 {
 	int ret, i;
+	uint16_t ethtype;
 	size_t total, altsize;
 	VNICState *vsp = DO_UPCAST(VNICState, vns_nc, ncp);
 
@@ -215,8 +233,7 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
 		total += (iov + i)->iov_len;
 	}
 
-	if (vsp->vns_ds.vnds_enabled &&
-	    is_dhcp_requestv(iov, iovcnt)) {
+	if (vsp->vns_ds.vnds_enabled && get_ethertypev(iov, iovcnt, &ethtype)) {
 		/*
 		 * Basically drop the packet because we can't send a
 		 * reply at this time. It's unfortunate, but we don't
@@ -225,13 +242,30 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
 		 */
 		if (!vnic_can_send(vsp))
 			return (total);
-		ret = create_dhcp_responsev(iov, iovcnt, &vsp->vns_ds);
+
+		VNICDHCPState *vdsp = &vsp->vns_ds;
+
+		switch (ethtype) {
+		case ETH_P_ARP:
+			if (!is_arp_requestv(iov, iovcnt, vdsp))
+				goto send;
+			ret = create_arp_responsev(iov, iovcnt, vdsp);
+			break;
+		case ETH_P_IP:
+			if (!is_dhcp_requestv(iov, iovcnt))
+				goto send;
+			ret = create_dhcp_responsev(iov, iovcnt, vdsp);
+			break;
+		default:
+			goto send;
+		}
+
 		/* This failed, drop it and continue */
 		if (ret == 0)
 			return (total);
 
 		ret = qemu_send_packet_async(&vsp->vns_nc,
-		    vsp->vns_ds.vnds_buf, ret, vnic_send_completed);
+		    vdsp->vnds_buf, ret, vnic_send_completed);
 		/*
 		 * qemu has told us that it can't receive any more data
 		 * at this time for the guest (host->guest traffic) so
@@ -243,6 +277,7 @@ vnic_receive_iov(VLANClientState *ncp, const struct iovec *iov,
 		return (total);
 	}
 
+send:
 	/*
 	 * Copy the iovcs to our write frameio. Be on the lookout for someone
 	 * giving us more vectors than we support in frameio. In that case,

@@ -2,7 +2,7 @@
  * QEMU System Emulator
  * Solaris VNIC DHCP support
  *
- * Copyright (c) 2011 Joyent, Inc.
+ * Copyright 2016 Joyent, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,6 +25,9 @@
 
 #include <stdio.h>
 #include <arpa/inet.h>
+#include <net/if.h>
+#include <net/if_arp.h>
+#include <netinet/if_ether.h>
 
 #include "net/vnic-dhcp.h"
 
@@ -369,9 +372,86 @@ debug_eth_frame(const uint8_t *buf_p, size_t size)
 }
 #endif
 
+/*
+ * Join the provided iovec into a single buffer, possibly copying into buf,
+ * whose length is passed as len. The returned pointer points to the joined
+ * buffer, and olen is updated with its length.
+ *
+ * If join_iov can't fit all of the iovec's contents into buf, it returns
+ * NULL.
+ */
+static uint8_t *
+join_iov(uint8_t *buf, const struct iovec *iov, int iovcnt, size_t len,
+    size_t *olen)
+{
+	size_t clen, toff = 0, tlen = len;
+
+	if (iovcnt == 1) {
+		*olen = iov->iov_len;
+		return (iov->iov_base);
+	}
+
+	while (iovcnt > 0) {
+		clen = iov->iov_len;
+		if (clen > tlen)
+			return (NULL);
+		bcopy(iov->iov_base, buf + toff, clen);
+		toff += clen;
+		tlen -= clen;
+		iov++;
+		iovcnt--;
+	}
+
+	*olen = toff;
+	return (buf);
+}
+
+/*
+ * Fetch at least len bytes from the given iov, possibly copying into buf,
+ * which should be at least len in length. The returned pointer points to
+ * the buffer to read from, and olen is updated with its length.
+ *
+ * If copy_iov can't fetch the requested number of bytes, it returns NULL.
+ */
+static uint8_t *
+copy_iov(uint8_t *buf, const struct iovec *iov, int iovcnt, size_t len,
+    size_t *olen)
+{
+	size_t clen, coff, tc, toff, tlen = len;
+
+	if (iov->iov_len >= len) {
+		*olen = iov->iov_len;
+		return (iov->iov_base);
+	}
+
+	clen = iov->iov_len;
+	coff = 0;
+	toff = 0;
+	while (tlen > 0) {
+		tc = MIN(tlen, clen);
+		if (clen == 0) {
+			if (iovcnt == 1)
+				return (NULL);
+			iov++;
+			iovcnt--;
+			clen = iov->iov_len;
+			coff = 0;
+			continue;
+		}
+		bcopy(iov->iov_base + coff, buf + toff, tc);
+		tlen -= tc;
+		clen -= tc;
+		coff += tc;
+		toff += tc;
+	}
+
+	*olen = len;
+	return (buf);
+}
+
 static int
 populate_dhcp_reply(const struct bootp_t *bp, struct bootp_t *rbp,
-    struct sockaddr_in * saddr, struct sockaddr_in *daddr, VNICDHCPState *vdsp)
+    struct sockaddr_in *saddr, struct sockaddr_in *daddr, VNICDHCPState *vdsp)
 {
 	uint8_t *q;
 	struct in_addr preq_addr;
@@ -537,7 +617,11 @@ dhcp_reply(const struct bootp_t *bp, const unsigned char *src_mac,
 	if (!populate_dhcp_reply(bp, rbp, &saddr, &daddr, vdsp))
 		return (0);
 
-	daddr.sin_addr.s_addr = 0xffffffffu;
+	if (bp->ip.ip_src.s_addr == 0) {
+		daddr.sin_addr.s_addr = 0xffffffffu;
+	} else {
+		daddr.sin_addr.s_addr = bp->ip.ip_src.s_addr;
+	}
 
 	/* Buffer Layout:
 	 *
@@ -545,7 +629,7 @@ dhcp_reply(const struct bootp_t *bp, const unsigned char *src_mac,
 	 *          | ip       | udphdr | dhcp payload |
 	 *          | udpiphdr          |
 	 *
-      	 */
+	 */
 
 	/* Ethernet header */
 	eh = (struct ethhdr *)vdsp->vnds_buf;
@@ -568,6 +652,45 @@ dhcp_reply(const struct bootp_t *bp, const unsigned char *src_mac,
 	return (sizeof(struct bootp_t) + sizeof(struct ethhdr));
 }
 
+int
+create_arp_responsev(const struct iovec *iov, int iovcnt, VNICDHCPState *vdsp)
+{
+	/* We use the maximum length of an IPv4 packet for our buffer length. */
+	uint8_t buf[65536], *bufp;
+	size_t len = 0;
+
+	if ((bufp = join_iov(buf, iov, iovcnt, sizeof (buf), &len)) == NULL) {
+		return (0);
+	}
+
+	return (create_arp_response(bufp, len, vdsp));
+}
+
+int
+create_arp_response(const uint8_t *buf_p, int pkt_len, VNICDHCPState *vdsp)
+{
+	struct ether_arp *inarp = (struct ether_arp *)(buf_p + ETH_HLEN);
+	struct ethhdr *outeth = (struct ethhdr *)vdsp->vnds_buf;
+	struct ether_arp *outarp =
+	    (struct ether_arp *)(vdsp->vnds_buf + ETH_HLEN);
+
+	memcpy(outeth->h_dest, inarp->arp_sha, ETH_ALEN);
+	memcpy(outeth->h_source, special_ethaddr, ETH_ALEN);
+	outeth->h_proto = htons(ETH_P_ARP);
+
+	outarp->arp_hrd = htons(ARPHRD_ETHER);
+	outarp->arp_pro = htons(ETH_P_IP);
+	outarp->arp_hln = ETH_ALEN;
+	outarp->arp_pln = 4;
+	outarp->arp_op = htons(ARPOP_REPLY);
+	memcpy(outarp->arp_sha, special_ethaddr, ETH_ALEN);
+	memcpy(outarp->arp_spa, &vdsp->vnds_srv_addr, sizeof (outarp->arp_spa));
+	memcpy(outarp->arp_tha, inarp->arp_sha, ETH_ALEN);
+	memcpy(outarp->arp_tpa, inarp->arp_spa, sizeof (outarp->arp_tpa));
+
+	return (sizeof (struct ethhdr) + sizeof (struct ether_arp));
+}
+
 /*
  * Since this is not the common path, just combine the IOV for the moment, it's
  * not great.
@@ -575,16 +698,15 @@ dhcp_reply(const struct bootp_t *bp, const unsigned char *src_mac,
 int
 create_dhcp_responsev(const struct iovec *iov, int iovcnt, VNICDHCPState *vdsp)
 {
-	int i;
-	size_t off;
-	uint8_t buf[65536];
+	/* We use the maximum length of an IPv4 packet for our buffer length. */
+	uint8_t buf[65536], *bufp;
+	size_t len = 0;
 
-	for (i = 0, off = 0; i < iovcnt; i++, iov++) {
-		bcopy(iov->iov_base, buf + off, iov->iov_len);
-		off += iov->iov_len;
+	if ((bufp = join_iov(buf, iov, iovcnt, sizeof (buf), &len)) == NULL) {
+		return (0);
 	}
 
-	return (create_dhcp_response(buf, off, vdsp));
+	return (create_dhcp_response(bufp, len, vdsp));
 }
 
 int
@@ -613,7 +735,81 @@ create_dhcp_response(const uint8_t *buf_p, int pkt_len, VNICDHCPState *vdsp)
 		return (0);
 	}
 
-	return (dhcp_reply(&bp, ((struct ethhdr *)buf_p)->h_dest, vdsp));
+	return (dhcp_reply(&bp, ((struct ethhdr *)buf_p)->h_source, vdsp));
+}
+
+int
+get_ethertype(const uint8_t *buf_p, size_t size, uint16_t *ethertype)
+{
+	if (size < ETH_HLEN) {
+		return (0);
+	}
+
+	*ethertype =
+	    ntohs(*(uint16_t *)(buf_p + offsetof(struct ethhdr, h_proto)));
+	return (1);
+}
+
+int
+get_ethertypev(const struct iovec *iov, int iovcnt, uint16_t *ethertype)
+{
+	uint8_t buf[1024], *bufp;
+	size_t len = 0;
+
+	if ((bufp = copy_iov(buf, iov, iovcnt, ETH_HLEN, &len)) == NULL) {
+		return (0);
+	}
+
+	return (get_ethertype(bufp, len, ethertype));
+}
+
+int
+is_arp_request(const uint8_t *buf_p, size_t size, VNICDHCPState *vdsp)
+{
+	struct ether_arp *arp;
+
+	DPRINTF("is_arp_request(): ");
+	if (size < (ETH_HLEN + sizeof (struct ether_arp))) {
+		DPRINTF("ARP packet too small\n");
+		return (0);
+	}
+
+	arp = (struct ether_arp *)(buf_p + ETH_HLEN);
+
+	if (ntohs(arp->arp_hrd) != ARPHRD_ETHER ||
+	    ntohs(arp->arp_pro) != ETH_P_IP ||
+	    ntohs(arp->arp_op) != ARPOP_REQUEST) {
+		DPRINTF("not an IP->Ethernet ARP request\n");
+		return (0);
+	}
+
+	if (arp->arp_hln != ETH_ALEN || arp->arp_pln != 4) {
+		DPRINTF("ARP request contains bad lengths\n");
+		return (0);
+	}
+
+	struct in_addr *lladdr = &vdsp->vnds_srv_addr;
+	struct in_addr *tpaddr = (struct in_addr *)arp->arp_tpa;
+
+	if (memcmp(tpaddr, lladdr, sizeof (struct in_addr)) != 0) {
+		return (0);
+	}
+
+	return (1);
+}
+
+int
+is_arp_requestv(const struct iovec *iov, int iovcnt, VNICDHCPState *vdsp)
+{
+	uint8_t buf[1024], *bufp;
+	size_t sz = ETH_HLEN + sizeof (struct ether_arp);
+	size_t len = 0;
+
+	if ((bufp = copy_iov(buf, iov, iovcnt, sz, &len)) == NULL) {
+		return (0);
+	}
+
+	return (is_arp_request(bufp, len, vdsp));
 }
 
 int
@@ -623,9 +819,8 @@ is_dhcp_request(const uint8_t *buf_p, size_t size)
 	struct udphdr *uh;
 
 	DPRINTF("is_dhcp_request(): ");
-	if (size < ETH_HLEN || (ntohs(*(uint16_t *)(buf_p + 12)) != ETH_P_IP) ||
-	    size < sizeof (struct ip)) {
-		DPRINTF("packet too small\n");
+	if (size < (ETH_HLEN + sizeof (struct ip) + sizeof (struct udphdr))) {
+		DPRINTF("IP packet too small\n");
 		return (0);
 	}
 
@@ -654,37 +849,15 @@ is_dhcp_request(const uint8_t *buf_p, size_t size)
 int
 is_dhcp_requestv(const struct iovec *iov, int iovcnt)
 {
-	uint8_t buf[1024];
-	size_t tlen = ETH_HLEN + sizeof (struct ip) + sizeof (struct udphdr);
-	size_t clen, coff, tc, toff;
+	uint8_t buf[1024], *bufp;
+	size_t sz = ETH_HLEN + sizeof (struct ip) + sizeof (struct udphdr);
+	size_t len = 0;
 
-	if (iov->iov_len >= (ETH_HLEN + sizeof (struct ip) +
-	    sizeof (struct udphdr))) {
-		return (is_dhcp_request(iov->iov_base, iov->iov_len));
+	if ((bufp = copy_iov(buf, iov, iovcnt, sz, &len)) == NULL) {
+		return (0);
 	}
 
-	clen = iov->iov_len;
-	coff = 0;
-	toff = 0;
-	while (tlen > 0) {
-		tc = MIN(tlen, clen);
-		if (clen == 0) {
-			if (iovcnt == 1)
-				return (0);
-			iov++;
-			clen = iov->iov_len;
-			coff = 0;
-		}
-		bcopy(iov->iov_base + coff, buf + toff, tc);
-		tlen -= tc;
-		clen -= tc;
-		coff += tc;
-		toff += tc;
-	}
-
-	return (is_dhcp_request(buf, ETH_HLEN + sizeof (struct ip) +
-	    sizeof (struct udphdr)));
-
+	return (is_dhcp_request(bufp, len));
 }
 
 static int

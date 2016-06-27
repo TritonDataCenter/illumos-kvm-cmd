@@ -2,7 +2,7 @@
  * QEMU System Emulator
  * Solaris VNIC DHCP support
  *
- * Copyright (c) 2011 Joyent, Inc.
+ * Copyright 2016 Joyent, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -48,6 +48,12 @@ typedef struct VNICDHCPState {
 	unsigned int	vnds_num_dns_addrs;
 } VNICDHCPState;
 
+extern int get_ethertype(const uint8_t *, size_t, uint16_t *ethertype);
+extern int get_ethertypev(const struct iovec *, int, uint16_t *);
+extern int create_arp_response(const uint8_t *, int, VNICDHCPState *);
+extern int create_arp_responsev(const struct iovec *, int, VNICDHCPState *);
+extern int is_arp_request(const uint8_t *, size_t, VNICDHCPState *);
+extern int is_arp_requestv(const struct iovec *, int, VNICDHCPState *);
 extern int create_dhcp_response(const uint8_t *, int, VNICDHCPState *);
 extern int create_dhcp_responsev(const struct iovec *, int, VNICDHCPState *);
 extern int is_dhcp_request(const uint8_t *, size_t);
