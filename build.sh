@@ -51,6 +51,7 @@ XLDFLAGS="${XLDFLAGS} -lz -lm -lc -lvnd"
     --disable-brlapi \
     --disable-curl \
     --enable-debug \
+    --disable-docs \
     --enable-kvm \
     --enable-kvm-pit \
     --enable-vnc-png \
