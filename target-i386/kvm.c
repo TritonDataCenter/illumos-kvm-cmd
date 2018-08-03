@@ -36,7 +36,11 @@
 #include "kvm_x86.h"
 
 #ifdef CONFIG_KVM_PARA
+#ifdef __sun__
+#include <sys/kvm_para.h>
+#else
 #include <linux/kvm_para.h>
+#endif
 #endif
 
 #ifdef __sun__
@@ -161,7 +165,16 @@ struct kvm_para_features {
     int cap;
     int feature;
 } para_features[] = {
+    /*
+     * This is a little hackish.  Upstream KVM has been refactored to make the
+     * process of exposing these related features more straightforward.  Rather
+     * than pull in all that delta, we just repeat the loop to set the
+     * additional needed bits.
+     */
     { KVM_CAP_CLOCKSOURCE, KVM_FEATURE_CLOCKSOURCE },
+    { KVM_CAP_CLOCKSOURCE, KVM_FEATURE_CLOCKSOURCE2 },
+    { KVM_CAP_CLOCKSOURCE, KVM_FEATURE_CLOCKSOURCE_STABLE_BIT },
+
     { KVM_CAP_NOP_IO_DELAY, KVM_FEATURE_NOP_IO_DELAY },
     { KVM_CAP_PV_MMU, KVM_FEATURE_MMU_OP },
 #ifdef KVM_CAP_ASYNC_PF
@@ -356,7 +369,7 @@ int kvm_arch_init_vcpu(CPUState *env)
     c = &cpuid_data.entries[cpuid_i++];
     memset(c, 0, sizeof(*c));
     c->function = KVM_CPUID_SIGNATURE;
-    c->eax = 0;
+    c->eax = KVM_CPUID_FEATURES;
     c->ebx = signature[0];
     c->ecx = signature[1];
     c->edx = signature[2];
