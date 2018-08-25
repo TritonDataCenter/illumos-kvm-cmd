@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2012, Joyent Inc., All rights reserved.
+# Copyright (c) 2018, Joyent, Inc.
 #
 
 for dir in seabios vgabios kvm/test; do
@@ -37,7 +37,7 @@ echo "==> Running configure"
 KVM_DIR="${KVM_DIR:-$(cd `pwd`/../kvm; pwd)}"
 CC="${CC:-${DESTDIR}/usr/bin/gcc}"
 XCFLAGS="-fno-builtin -I${PNGINC} -isystem ${DESTDIR}/usr/include -msave-args"
-XLDFLAGS="-nodefaultlibs -L${PNGLIB} -L${DESTDIR}/usr/lib -L${DESTDIR}/lib"
+XLDFLAGS="-nodefaultlibs -L${PNGLIB} -L${DESTDIR}/usr/lib/amd64 -L${DESTDIR}/lib/amd64"
 XLDFLAGS="${XLDFLAGS} -Wl,-zfatal-warnings -Wl,-zassert-deflib"
 XLDFLAGS="${XLDFLAGS} -lz -lm -lc -lvnd"
 ./configure \
