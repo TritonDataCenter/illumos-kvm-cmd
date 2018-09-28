@@ -2,7 +2,7 @@
  * qemu/kvm integration, x86 specific code
  *
  * Copyright (C) 2006-2008 Qumranet Technologies
- * Portions Copyright 2011 Joyent, Inc.
+ * Portions Copyright 2018 Joyent, Inc.
  *
  * Licensed under the terms of the GNU GPL version 2 or higher.
  */
@@ -22,7 +22,7 @@
 #include <pthread.h>
 #include <sys/utsname.h>
 #ifdef CONFIG_KVM_PARA
-#include <linux/kvm_para.h>
+#include <sys/kvm_para.h>
 #endif
 #include <sys/ioctl.h>
 

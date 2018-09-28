@@ -10,7 +10,7 @@
  * This work is licensed under the terms of the GNU GPL, version 2 or later.
  * See the COPYING file in the top-level directory.
  *
- * Portions Copyright 2011 Joyent, Inc.
+ * Portions Copyright 2018 Joyent, Inc.
  */
 
 #include <sys/types.h>
@@ -36,11 +36,7 @@
 #include "kvm_x86.h"
 
 #ifdef CONFIG_KVM_PARA
-#ifdef __sun__
 #include <sys/kvm_para.h>
-#else
-#include <linux/kvm_para.h>
-#endif
 #endif
 
 #ifdef __sun__
