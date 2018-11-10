@@ -226,6 +226,6 @@ EventNotifier *virtio_queue_get_guest_notifier(VirtQueue *vq);
 EventNotifier *virtio_queue_get_host_notifier(VirtQueue *vq);
 void virtio_queue_notify_vq(VirtQueue *vq);
 void virtio_irq(VirtQueue *vq);
-int virtqueue_stalled(VirtQueue *vq);
+int virtqueue_stalled(VirtIODevice *vdev, VirtQueue *vq);
 int virtqueue_handled(VirtQueue *vq);
 #endif

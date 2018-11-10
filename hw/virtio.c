@@ -904,18 +904,28 @@ int virtqueue_handled(VirtQueue *vq)
  * the guest disabled the queue and is waiting for an interrupt from the host to
  * go and enable it again. In fact, when in this state a little bit of libproc
  * magic gets us going again rather reliably.
- * 
+ *
  * Eventually the guest will go through and unmask interrupts saying that it
  * wants an injection. If we reach a point in time where the last seen available
  * index is equal to the available index ring and is equal to the used index
  * ring, then we'll go ahead and install the interupt.
  */
-int virtqueue_stalled(VirtQueue *vq)
+int virtqueue_stalled(VirtIODevice *vdev, VirtQueue *vq)
 {
 	smp_mb();
 
-	if (vring_avail_flags(vq) & VRING_AVAIL_F_NO_INTERRUPT)
-		return (0);
+	if (vring_avail_flags(vq) & VRING_AVAIL_F_NO_INTERRUPT) {
+		/*
+		 * The guest has not enabled interrupts on the available ring.
+		 *
+		 * If the notify-on-empty feature is enabled, the specification
+		 * says we should interrupt anyway when the available ring is
+		 * completely drained.  Otherwise, continue to wait.
+		 */
+		if (!(vdev->guest_features & (1 << VIRTIO_F_NOTIFY_ON_EMPTY))) {
+			return (0);
+		}
+	}
 
 	if (vring_used_flags(vq) & VRING_USED_F_NO_NOTIFY)
 		return (0);
@@ -924,11 +934,27 @@ int virtqueue_stalled(VirtQueue *vq)
 		return (0);
 
 	/* We could have also lost the interrupt the other way */
-	if (vq->last_avail_idx != vring_avail_idx(vq))
+	if (vq->last_avail_idx != vring_avail_idx(vq)) {
+		/*
+		 * There are still some descriptors in the available ring to
+		 * process; return and process the queue again.
+		 */
 		return (2);
+	}
 
-	if (vq->last_avail_idx != vring_used_idx(vq))
+	if (vq->last_avail_idx != vring_used_idx(vq)) {
+		/*
+		 * Both the available ring index and the used ring index begin
+		 * at zero.  The available ring index is incremented by the
+		 * guest for each frame sent, and the used ring index is
+		 * incremented by the host each time we return the memory to
+		 * the guest.
+		 *
+		 * If the values are not equal, we have not accepted and then
+		 * returned an equal number of descriptors.
+		 */
 		return (0);
+	}
 
 	/*
 	 * Interrupts are enabled and we're at a point in time where we would
