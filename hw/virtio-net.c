@@ -199,7 +199,7 @@ static void virtio_net_rein_tick(void *opaque)
 		return;
 	}
 
-	ret = virtqueue_stalled(n->tx_vq);
+	ret = virtqueue_stalled(&n->vdev, n->tx_vq);
 	if (ret == 1) {
 		virtio_net_rein_event(n, REIN_INJECT, n->rein_timer_ticks);
 		virtio_net_rein_disable(n);
