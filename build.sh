@@ -24,7 +24,7 @@ fi
 
 if [[ ! -e ${PNGLIB}/libpng.a ]]; then
     (cd ${PNGDIR} && \
-	CC="${CC:-${DESTDIR}/usr/bin/gcc}" \
+	CC="${CC:-${STRAP_AREA}/usr/bin/gcc}" \
 	LDFLAGS="-m64 -L${DESTDIR}/usr/lib/amd64 -L${DESTDIR}/lib/amd64" \
 	CPPFLAGS="-isystem ${DESTDIR}/usr/include" \
 	CFLAGS="-m64" ./configure --disable-shared && \
@@ -35,7 +35,7 @@ fi
 
 echo "==> Running configure"
 KVM_DIR="${KVM_DIR:-$(cd `pwd`/../kvm; pwd)}"
-CC="${CC:-${DESTDIR}/usr/bin/gcc}"
+CC="${CC:-${STRAP_AREA}/usr/bin/gcc}"
 XCFLAGS="-fno-builtin -I${PNGINC} -isystem ${DESTDIR}/usr/include -msave-args"
 XLDFLAGS="-nodefaultlibs -L${PNGLIB} -L${DESTDIR}/usr/lib/amd64 -L${DESTDIR}/lib/amd64"
 XLDFLAGS="${XLDFLAGS} -Wl,-zfatal-warnings -Wl,-zassert-deflib"
