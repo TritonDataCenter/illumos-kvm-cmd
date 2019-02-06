@@ -25,9 +25,7 @@ QEMU_DGFLAGS += -MMD -MP -MT $@ -MF $(*D)/$(*F).d
 
 LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(1) $(LIBS),"  LINK  $(TARGET_DIR)$@")
 
-CTFMERGE_CMD = $(call quiet-command, $(CTFMERGE) -L VERSION -o $@ $(1),"  CTFMERGE  $(TARGET_DIR)$@")
-
-CTFCONVERT_CMD = $(call quiet-command, CTFCONVERT=$(CTFCONVERT) find ../ -type f -name '*.o' -exec ../ctf.sh '{}' \;)
+CTFCONVERT_CMD = $(call quiet-command, $(CTFCONVERT) -L VERSION -o $@ $@,"  CTFCONVERT  $(TARGET_DIR)$@")
 
 ifeq ($(TRACE_BACKEND),dtrace)
 ifneq ($(strip $(CONFIG_SOLARIS)),)
