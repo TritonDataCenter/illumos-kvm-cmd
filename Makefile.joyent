@@ -20,6 +20,8 @@
 # THE SOFTWARE.
 #
 
+include		$(PWD)/../../../build.env
+
 PROTO_AREA =	$(PWD)/../../../proto
 STRAP_AREA =	$(PWD)/../../../proto.strap
 KERNEL_SOURCE =	$(PWD)/../../illumos
@@ -52,6 +54,11 @@ ALWAYS_CFLAGS = \
 	-Wall \
 	-Werror \
 	-fno-inline-functions
+
+# Skip dubious optimizations in later GCCs
+ifneq ($(PRIMARY_COMPILER_VER),4)
+ALWAYS_CFLAGS += -fno-aggressive-loop-optimizations
+endif
 
 USER_CFLAGS = \
 	-finline \

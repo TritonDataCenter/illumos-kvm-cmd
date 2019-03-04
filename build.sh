@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2018, Joyent, Inc.
+# Copyright (c) 2019, Joyent, Inc.
 #
 
 for dir in seabios vgabios kvm/test; do
@@ -12,31 +12,40 @@ PNGDIR="${PWD}/libpng-1.5.4"
 PNGINC="${PNGDIR}/proto/usr/local/include"
 PNGLIB="${PNGDIR}/proto/usr/local/lib"
 
+. $(pwd)/../../../build.env
+
+#
+# Skip dangerous GCC options (not that any specific problems are known of here).
+#
+if [[ "$PRIMARY_COMPILER_VER" -gt 4 ]]; then
+	XCFLAGS=-fno-aggressive-loop-optimizations
+fi
+
 if [[ ! -d ${PNGDIR} ]]; then
-    (curl -k https://download.joyent.com/pub/kvm-cmd/libpng-1.5.4.tar.gz | \
-        gtar -zxf -)
-    if [[ $? != "0" || ! -d ${PNGDIR} ]]; then
-        echo "Failed to get libpng."
-        rm -rf ${PNGDIR}
-        exit 1
-    fi
+	(curl -k https://download.joyent.com/pub/kvm-cmd/libpng-1.5.4.tar.gz | \
+	    gtar -zxf -)
+	if [[ $? != "0" || ! -d ${PNGDIR} ]]; then
+		echo "Failed to get libpng."
+		rm -rf ${PNGDIR}
+		exit 1
+	fi
 fi
 
 if [[ ! -e ${PNGLIB}/libpng.a ]]; then
-    (cd ${PNGDIR} && \
-	CC="${CC:-${STRAP_AREA}/usr/bin/gcc}" \
-	LDFLAGS="-m64 -L${DESTDIR}/usr/lib/amd64 -L${DESTDIR}/lib/amd64" \
-	CPPFLAGS="-isystem ${DESTDIR}/usr/include" \
-	CFLAGS="-m64" ./configure --disable-shared && \
-        make && \
-        mkdir -p ${PNGDIR}/proto && \
-        make DESTDIR=${PNGDIR}/proto install)
+	(cd ${PNGDIR} && \
+	    CC="${CC:-${STRAP_AREA}/usr/bin/gcc}" \
+	    LDFLAGS="-m64 -L${DESTDIR}/usr/lib/amd64 -L${DESTDIR}/lib/amd64" \
+	    CPPFLAGS="-isystem ${DESTDIR}/usr/include" \
+	    CFLAGS="-m64 $XCFLAGS" ./configure --disable-shared && \
+	    make && \
+	    mkdir -p ${PNGDIR}/proto && \
+	    make DESTDIR=${PNGDIR}/proto install)
 fi
 
 echo "==> Running configure"
 KVM_DIR="${KVM_DIR:-$(cd `pwd`/../kvm; pwd)}"
 CC="${CC:-${STRAP_AREA}/usr/bin/gcc}"
-XCFLAGS="-fno-builtin -I${PNGINC} -isystem ${DESTDIR}/usr/include -msave-args"
+XCFLAGS="$XCFLAGS -fno-builtin -I${PNGINC} -isystem ${DESTDIR}/usr/include -msave-args"
 XLDFLAGS="-nodefaultlibs -L${PNGLIB} -L${DESTDIR}/usr/lib/amd64 -L${DESTDIR}/lib/amd64"
 XLDFLAGS="${XLDFLAGS} -Wl,-zfatal-warnings -Wl,-zassert-deflib"
 XLDFLAGS="${XLDFLAGS} -lz -lm -lc -lvnd"
