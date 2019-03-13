@@ -1,3 +1,6 @@
+#
+# Copyright (c) 2019, Joyent, Inc.
+#
 
 # Don't use implicit rules or variables
 # we have explicit rules for everything
@@ -25,9 +28,11 @@ QEMU_DGFLAGS += -MMD -MP -MT $@ -MF $(*D)/$(*F).d
 
 LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(1) $(LIBS),"  LINK  $(TARGET_DIR)$@")
 
-CTFMERGE_CMD = $(call quiet-command, $(CTFMERGE) -L VERSION -o $@ $(1),"  CTFMERGE  $(TARGET_DIR)$@")
-
-CTFCONVERT_CMD = $(call quiet-command, CTFCONVERT=$(CTFCONVERT) find ../ -type f -name '*.o' -exec ../ctf.sh '{}' \;)
+#
+# Quite a few components are empty files or not compiled with CTF (such as
+# libpng).
+#
+CTFCONVERT_CMD = $(call quiet-command, $(CTFCONVERT) -m -L VERSION $@," CTFCONVERT  $(TARGET_DIR)$@")
 
 ifeq ($(TRACE_BACKEND),dtrace)
 ifneq ($(strip $(CONFIG_SOLARIS)),)
