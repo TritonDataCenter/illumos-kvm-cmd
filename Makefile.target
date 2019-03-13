@@ -1,5 +1,5 @@
 # Copyright 2011 QEMU contributors
-# Portions Copyright 2011 Joyent, Inc.
+# Portions Copyright 2019 Joyent, Inc.
 # -*- Mode: makefile -*-
 
 GENERATED_HEADERS = config-target.h
@@ -382,9 +382,8 @@ ifeq ($(TRACE_BACKEND),dtrace)
 ifneq ($(strip $(CONFIG_SOLARIS)),)
 $(QEMU_PROG): $(obj-y) $(obj-$(TARGET_BASE_ARCH)-y)
 	$(call quiet-command, dtrace $(CONFIG_DTRACE_FLAGS) -o ../trace-dtrace.o -s ../trace-dtrace.dtrace -G $(obj-y) $(obj-$(TARGET_BASE_ARCH)-y),"  LINK  $(TARGET_DIR)$@.dtrace")
-	$(call CTFCONVERT_CMD)
 	$(call LINK,$(obj-y) $(obj-$(TARGET_BASE_ARCH)-y) ../trace-dtrace.o)
-	$(call CTFMERGE_CMD, $(obj-y) $(obj-$(TARGET_BASE_ARCH)-y))
+	$(call CTFCONVERT_CMD, $(obj-y) $(obj-$(TARGET_BASE_ARCH)-y))
 else
 $(QEMU_PROG): $(obj-y) $(obj-$(TARGET_BASE_ARCH)-y)
 	$(call LINK,$(obj-y) $(obj-$(TARGET_BASE_ARCH)-y))
