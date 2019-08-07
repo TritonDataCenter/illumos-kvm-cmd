@@ -22,7 +22,7 @@ if [[ "$PRIMARY_COMPILER_VER" -gt 4 ]]; then
 fi
 
 if [[ ! -d ${PNGDIR} ]]; then
-	(curl -k https://us-east.manta.joyent.com/Joyent_Dev/public/releng/kvm-cmd/libpng-1.5.4.tar.gz | \
+	(curl https://us-east.manta.joyent.com/Joyent_Dev/public/releng/kvm-cmd/libpng-1.5.4.tar.gz | \
 	    gtar -zxf -)
 	if [[ $? != "0" || ! -d ${PNGDIR} ]]; then
 		echo "Failed to get libpng."
