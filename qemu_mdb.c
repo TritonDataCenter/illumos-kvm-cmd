@@ -19,8 +19,7 @@
  * CDDL HEADER END
  */
 /*
- * Copyright (c) 2012 Joyent, Inc.  All rights reserved.
- * Use is subject to license terms.
+ * Copyright 2019 Joyent, Inc.
  */
 
 #include <sys/mdb_modapi.h>
@@ -194,7 +193,7 @@ qemu_mdb_host_bus_init(mdb_walk_state_t *wsp)
 	struct PCIHostBus *head;
 	GElf_Sym sym;
 
-	if (wsp->walk_addr != NULL) {
+	if (wsp->walk_addr != (uintptr_t)NULL) {
 		mdb_printf("qemu_host_bus does not support local walks");
 		return (WALK_ERR);
 	}
@@ -231,7 +230,7 @@ qemu_mdb_host_bus_step(mdb_walk_state_t *wsp)
 	struct PCIHostBus bus;
 	uintptr_t addr = wsp->walk_addr;
 
-	if (addr == NULL)
+	if (addr == (uintptr_t)NULL)
 		return (WALK_DONE);
 
 	if (mdb_vread(&bus, sizeof (bus), addr) != sizeof (bus)) {
@@ -260,7 +259,7 @@ qemu_mdb_pci_device_init(mdb_walk_state_t *wsp)
 	 * there is only one HostBus and that that HostBus in reality only has
 	 * one PCIBus which is the one we care about. So that's what we do here.
 	 */
-	if (wsp->walk_addr == NULL) {
+	if (wsp->walk_addr == (uintptr_t)NULL) {
 		if (mdb_lookup_by_name("host_buses", &sym) != 0) {
 			mdb_warn("unable to locate host_buse");
 			return (WALK_ERR);
@@ -330,7 +329,7 @@ qemu_mdb_pci_device_step(mdb_walk_state_t *wsp)
 
 	pdw->pdw_idx = ii;
 	if (ii == NDEVICES)
-		wsp->walk_addr = NULL;
+		wsp->walk_addr = (uintptr_t)NULL;
 	else
 		wsp->walk_addr = (uintptr_t)pdw->pdw_devs[ii];
 
@@ -341,7 +340,7 @@ qemu_mdb_pci_device_step(mdb_walk_state_t *wsp)
 static int
 qemu_mdb_pci_dev_type_init(mdb_walk_state_t *wsp)
 {
-	if (wsp->walk_addr != NULL) {
+	if (wsp->walk_addr != (uintptr_t)NULL) {
 		mdb_warn("local walks not supported");
 		return (WALK_ERR);
 	}
@@ -364,7 +363,7 @@ qemu_mdb_pci_dev_type_step(mdb_walk_state_t *wsp)
 {
 	PCIDevice dev;
 
-	if (wsp->walk_addr == NULL) {
+	if (wsp->walk_addr == (uintptr_t)NULL) {
 		mdb_warn("found unexpected null device pointer");
 		return (WALK_ERR);
 	}
@@ -437,7 +436,7 @@ qemu_mdb_nic_state_walk_init(mdb_walk_state_t *wsp)
 {
 	assert(wsp->walk_arg != NULL);
 
-	if (wsp->walk_addr != NULL) {
+	if (wsp->walk_addr != (uintptr_t)NULL) {
 		mdb_warn("local walks are not supported\n");
 		return (WALK_ERR);
 	}
@@ -456,7 +455,7 @@ qemu_mdb_nic_state_walk_step(mdb_walk_state_t *wsp)
 	VLANClientState v;
 	char buf[128];
 
-	assert(wsp->walk_addr != NULL);
+	assert(wsp->walk_addr != (uintptr_t)NULL);
 
 	if (mdb_vread(&v, sizeof (v), wsp->walk_addr) != sizeof (v)) {
 		mdb_warn("failed to read VLANClient %p", wsp->walk_addr);
@@ -602,7 +601,7 @@ qemu_mdb_get_ram_ptr(uintptr_t addr)
 
 	rbp = (uintptr_t)rl.blocks.lh_first;
 	for (;;) {
-		if (rbp == NULL) {
+		if (rbp == (uintptr_t)NULL) {
 			mdb_warn("failed to find RAMBlock for address");
 			return (0);
 		}
@@ -831,7 +830,7 @@ qemu_mdb_ramblock_walk_init(mdb_walk_state_t *wsp)
 	GElf_Sym sym;
 	RAMList rl;
 
-	if (wsp->walk_addr != NULL) {
+	if (wsp->walk_addr != (uintptr_t)NULL) {
 		mdb_warn("qemu_ramblock does not support local walks\n");
 		return (WALK_ERR);
 	}
@@ -847,7 +846,7 @@ qemu_mdb_ramblock_walk_init(mdb_walk_state_t *wsp)
 	}
 
 	wsp->walk_addr = (uintptr_t)rl.blocks.lh_first;
-	if (wsp->walk_addr == NULL)
+	if (wsp->walk_addr == (uintptr_t)NULL)
 		return (WALK_DONE);
 
 	return (WALK_NEXT);
@@ -859,7 +858,7 @@ qemu_mdb_ramblock_walk_step(mdb_walk_state_t *wsp)
 	RAMBlock rb;
 	uintptr_t addr = wsp->walk_addr;
 
-	if (addr == NULL)
+	if (addr == (uintptr_t)NULL)
 		return (WALK_DONE);
 
 	if (mdb_vread(&rb, sizeof (rb), addr) != sizeof (rb)) {
@@ -923,7 +922,7 @@ qemu_mdb_vlan_walk_init(mdb_walk_state_t *wsp)
 	GElf_Sym sym;
 	qemu_vlan_header_t v;
 
-	if (wsp->walk_addr != NULL) {
+	if (wsp->walk_addr != (uintptr_t)NULL) {
 		mdb_warn("qemu_vlan does not support local walks\n");
 		return (WALK_ERR);
 	}
@@ -949,7 +948,7 @@ qemu_mdb_vlan_walk_step(mdb_walk_state_t *wsp)
 	VLANState v;
 	uintptr_t addr = wsp->walk_addr;
 
-	if (addr == NULL)
+	if (addr == (uintptr_t)NULL)
 		return (WALK_DONE);
 
 	if (mdb_vread(&v, sizeof (v), addr) != sizeof (v)) {
@@ -965,7 +964,7 @@ qemu_mdb_vlan_walk_step(mdb_walk_state_t *wsp)
 static int
 qemu_mdb_vlan_clients_walk_init(mdb_walk_state_t *wsp)
 {
-	if (wsp->walk_addr != NULL) {
+	if (wsp->walk_addr != (uintptr_t)NULL) {
 		mdb_warn("qemu_vlan does not support local walks\n");
 		return (WALK_ERR);
 	}
@@ -987,7 +986,7 @@ qemu_mdb_vlan_clients_walk_step(mdb_walk_state_t *wsp)
 
 	addr = (uintptr_t)((VLANState *)wsp->walk_layer)->clients.tqh_first;
 
-	while (addr != NULL) {
+	while (addr != (uintptr_t)NULL) {
 		if (mdb_vread(&v, sizeof (v), addr) != sizeof (v)) {
 			mdb_warn("couldn't read VLANClient at %p", addr);
 			return (WALK_ERR);
