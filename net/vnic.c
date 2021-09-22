@@ -315,6 +315,9 @@ send:
 	if (ret == -1 && errno == EAGAIN) {
 		vnic_write_poll(vsp, 1);
 		return (0);
+	} else if (ret == -1 && errno == ERANGE) {
+		/* If it's too big or too small for the kernel, silently drop it. */
+		return (total);
 	} else if (ret == -1) {
 		abort();
 	}
