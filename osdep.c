@@ -36,7 +36,7 @@
 #include <sys/mman.h>
 #endif
 
-#ifdef CONFIG_SOLARIS
+#if defined(CONFIG_SOLARIS) && defined(_STRICT_POSIX)
 #include <sys/types.h>
 #include <sys/statvfs.h>
 /* See MySQL bug #7156 (http://bugs.mysql.com/bug.php?id=7156) for
