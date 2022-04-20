@@ -36,14 +36,6 @@
 #include <sys/mman.h>
 #endif
 
-#if defined(CONFIG_SOLARIS) && defined(_STRICT_POSIX)
-#include <sys/types.h>
-#include <sys/statvfs.h>
-/* See MySQL bug #7156 (http://bugs.mysql.com/bug.php?id=7156) for
-   discussion about Solaris header problems */
-extern int madvise(caddr_t, size_t, int);
-#endif
-
 #include "qemu-common.h"
 #include "trace.h"
 #include "sysemu.h"
