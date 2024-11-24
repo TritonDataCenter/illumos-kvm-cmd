@@ -3,6 +3,7 @@
  * illumos VNIC/vnd support
  *
  * Copyright 2016 Joyent, Inc.
+ * Copyright 2024 MNX Cloud, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -389,7 +390,8 @@ vnic_frameio_init(VNICState *vsp)
 int
 net_init_vnic(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan)
 {
-	int fd, len, vnderr, syserr;
+	int fd, len, syserr;
+	vnd_errno_t vnderr;
 	const char *ifname, *mac;
 	uchar_t *macaddr;
 	VLANClientState *ncp;
