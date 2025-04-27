@@ -25,6 +25,9 @@
 #include <sys/kvm_para.h>
 #endif
 #include <sys/ioctl.h>
+#ifdef __sun
+#include <sys/systeminfo.h>
+#endif
 
 #include "kvm.h"
 #include "hw/apic.h"
@@ -506,9 +509,19 @@ int kvm_arch_qemu_create_context(void)
 {
     int r;
     struct utsname utsname;
+    char sysinfo_arch[20];
 
     uname(&utsname);
-    lm_capable_kernel = strcmp(utsname.machine, "x86_64") == 0;
+    if(strcmp(utsname.sysname, "SunOS") == 0) {
+        sysinfo(SI_ARCHITECTURE_K, sysinfo_arch, sizeof(sysinfo_arch));
+        if(strcmp(sysinfo_arch, "amd64") == 0) {
+            lm_capable_kernel = 1;
+        } else {
+            lm_capable_kernel = 0;
+        }
+    }
+    else
+        lm_capable_kernel = strcmp(utsname.machine, "x86_64") == 0;
 
     if (kvm_shadow_memory) {
         kvm_set_shadow_pages(kvm_context, kvm_shadow_memory);
@@ -723,11 +736,12 @@ void kvm_arch_push_nmi(void *opaque)
 static int kvm_reset_msrs(CPUState *env)
 {
     struct {
-        struct kvm_msrs info;
+        uint32_t nmsrs; /* number of msrs in entries */
+        uint32_t pad;
         struct kvm_msr_entry entries[100];
-    } msr_data;
+    } kvm_msrs;
     int n;
-    struct kvm_msr_entry *msrs = msr_data.entries;
+    struct kvm_msr_entry *msrs = kvm_msrs.entries;
     uint32_t index;
     uint64_t data;
 
@@ -747,9 +761,9 @@ static int kvm_reset_msrs(CPUState *env)
         kvm_msr_entry_set(&msrs[n], kvm_msr_list->indices[n], data);
     }
 
-    msr_data.info.nmsrs = n;
+    kvm_msrs.nmsrs = n;
 
-    return kvm_vcpu_ioctl(env, KVM_SET_MSRS, &msr_data);
+    return kvm_vcpu_ioctl(env, KVM_SET_MSRS, &kvm_msrs);
 }
 
 
