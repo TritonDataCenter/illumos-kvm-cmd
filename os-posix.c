@@ -63,7 +63,11 @@ void os_setup_early_signal_handling(void)
 
 static void termsig_handler(int signal)
 {
-    qemu_system_shutdown_request();
+    /* Treat SIGTERM like bhyve does, as an ACPI power-off. */
+    if (signal == SIGTERM)
+        qemu_system_powerdown_request();
+    else
+        qemu_system_shutdown_request();
 }
 
 static void sigchld_handler(int signal)
