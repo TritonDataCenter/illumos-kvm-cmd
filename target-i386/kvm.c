@@ -837,10 +837,11 @@ static void kvm_msr_entry_set(struct kvm_msr_entry *entry,
 static int kvm_put_msrs(CPUState *env, int level)
 {
     struct {
-        struct kvm_msrs info;
+        uint32_t nmsrs; /* number of msrs in entries */
+        uint32_t pad;
         struct kvm_msr_entry entries[100];
-    } msr_data;
-    struct kvm_msr_entry *msrs = msr_data.entries;
+    } kvm_msrs;
+    struct kvm_msr_entry *msrs = kvm_msrs.entries;
     int n = 0;
 
     kvm_msr_entry_set(&msrs[n++], MSR_IA32_SYSENTER_CS, env->sysenter_cs);
@@ -903,9 +904,9 @@ static int kvm_put_msrs(CPUState *env, int level)
     }
 #endif
 
-    msr_data.info.nmsrs = n;
+    kvm_msrs.nmsrs = n;
 
-    return kvm_vcpu_ioctl(env, KVM_SET_MSRS, &msr_data);
+    return kvm_vcpu_ioctl(env, KVM_SET_MSRS, &kvm_msrs);
 
 }
 
@@ -1091,10 +1092,11 @@ static int kvm_get_sregs(CPUState *env)
 static int kvm_get_msrs(CPUState *env)
 {
     struct {
-        struct kvm_msrs info;
+        uint32_t nmsrs; /* number of msrs in entries */
+        uint32_t pad;
         struct kvm_msr_entry entries[100];
-    } msr_data;
-    struct kvm_msr_entry *msrs = msr_data.entries;
+    } kvm_msrs;
+    struct kvm_msr_entry *msrs = kvm_msrs.entries;
     int ret, i, n;
 
     n = 0;
@@ -1134,8 +1136,8 @@ static int kvm_get_msrs(CPUState *env)
     }
 #endif
 
-    msr_data.info.nmsrs = n;
-    ret = kvm_vcpu_ioctl(env, KVM_GET_MSRS, &msr_data);
+    kvm_msrs.nmsrs = n;
+    ret = kvm_vcpu_ioctl(env, KVM_GET_MSRS, &kvm_msrs);
     if (ret < 0) {
         return ret;
     }
